@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contour Lines Lab</title>
+  <!-- Font Be Vietnam Pro (cần mạng). Mất mạng thì tự dùng font hệ thống, app vẫn chạy. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<!-- class "viewer" = chế độ xem: chỉ có ảnh + tương tác. Phím H hoặc nút ⚙ để mở bảng tuỳ chỉnh. -->
+<body class="viewer">
+  <header class="topbar">
+    <strong class="brand">Contour Lines Lab</strong>
+    <label class="field-inline">Preset <select id="presetSelect"></select></label>
+    <span class="sep"></span>
+    <label class="btn">Tải ảnh lên<input type="file" class="file-image" accept="image/*" hidden></label>
+    <button class="btn" id="btnSample">Ảnh mẫu mới</button>
+    <button class="btn btn-play" title="Tạm dừng (Space)">⏸</button>
+    <span class="sep"></span>
+    <button class="btn btn-png">Lưu PNG</button>
+    <select id="videoLen" title="Độ dài video">
+      <option value="3">3 giây</option>
+      <option value="4" selected>4 giây</option>
+      <option value="6">6 giây</option>
+      <option value="10">10 giây</option>
+      <option value="loop">1 vòng lặp</option>
+    </select>
+    <button class="btn primary" id="btnVideo">Quay video</button>
+    <span class="sep"></span>
+    <button class="btn" id="btnSavePreset">Lưu preset</button>
+    <label class="btn">Mở preset<input type="file" id="filePreset" accept=".json,application/json" hidden></label>
+    <span class="grow"></span>
+    <label class="field-inline" title="Độ phân giải xử lý (cạnh dài)">Xử lý <select id="resSelect"></select></label>
+    <label class="field-inline"><input type="checkbox" id="chkDesc" checked> Chú thích</label>
+    <button class="btn btn-mode" title="Chế độ xem (H)">✕ Chế độ xem</button>
+  </header>
+
+  <main class="layout">
+    <section class="viewport">
+      <div class="stage" id="stage">
+        <canvas id="view"></canvas>
+        <!-- Lớp vẽ đường lưới (bật bằng "Hiện lưới" hoặc phím G); không lọt vào PNG / video -->
+        <canvas id="gridOverlay"></canvas>
+        <div class="drop-hint">Thả ảnh vào đây</div>
+        <pre class="error" id="error" hidden></pre>
+      </div>
+      <nav class="stagebar" id="stagebar" aria-label="Xem kết quả tới bước"></nav>
+    </section>
+    <!-- Bảng điều khiển: js/ui.js tự sinh từ js/presets.js -->
+    <aside class="panel" id="panel"></aside>
+  </main>
+
+  <!-- Thanh nút nổi ở chế độ xem -->
+  <nav class="viewer-bar">
+    <label class="btn">Tải ảnh<input type="file" class="file-image" accept="image/*" hidden></label>
+    <button class="btn btn-play" title="Tạm dừng (Space)">⏸</button>
+    <button class="btn btn-png">Lưu PNG</button>
+    <button class="btn primary btn-mode" title="Tuỳ chỉnh (H)">⚙ Tuỳ chỉnh</button>
+  </nav>
+  <p class="viewer-hint">Kéo ảnh: hàng và cột co giãn theo tay · chạm nhanh: phía đó to ra · G hiện lưới · Ctrl+V dán ảnh · H mở tuỳ chỉnh</p>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Script thường (không phải module) để nhấp đúp index.html vẫn chạy. Thứ tự nạp quan trọng. -->
+  <script src="js/gl.js"></script>
+  <script src="js/shaders.js"></script>
+  <script src="js/textures.js"></script>
+  <script src="js/presets.js"></script>
+  <script src="js/pipeline.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/grid.js"></script>
+  <script src="js/interact.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

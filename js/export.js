@@ -1,0 +1,116 @@
+/*
+ * export.js — Lưu PNG, quay video, lưu/mở preset JSON.
+ */
+window.CL = window.CL || {};
+
+CL.exporter = (() => {
+  'use strict';
+
+  function download(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+
+  const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+  // PNG: renderNoFilter() vẽ lại khung hiện tại KHÔNG lọc chống moiré, rồi lấy nội dung canvas.
+  function png(canvas, renderNoFilter, toast) {
+    renderNoFilter();
+    canvas.toBlob((blob) => {
+      if (!blob) return toast('Không tạo được PNG.', true);
+      download(blob, `contour-lines-${stamp()}.png`);
+      toast('Đã lưu PNG.');
+    }, 'image/png');
+  }
+
+  // Danh sách định dạng video theo thứ tự ưu tiên: Safari chuộng MP4, còn lại chuộng WebM.
+  function videoTypes() {
+    if (!window.MediaRecorder) return [];
+    const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
+    const webm = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    const mp4 = ['video/mp4;codecs=avc1', 'video/mp4'];
+    return (isSafari ? mp4.concat(webm) : webm.concat(mp4)).filter((t) => MediaRecorder.isTypeSupported(t));
+  }
+
+  let current = null; // MediaRecorder đang quay
+
+  /*
+   * Quay video từ canvas.
+   *  seconds : độ dài
+   *  onStart : gọi khi bắt đầu mỗi lần quay (main.js tua thời gian về 0, tắt lọc)
+   *  onEnd   : gọi khi kết thúc (thành công hay thất bại)
+   * captureStream(30) chỉ lấy khung khi canvas thay đổi, nên main.js vẽ lại mỗi requestAnimationFrame.
+   * Nếu file ra 0 byte (lỗi codec), thử lại với định dạng kế tiếp.
+   */
+  function video({ canvas, seconds, onStart, onEnd, toast }) {
+    const types = videoTypes();
+    if (!types.length || !canvas.captureStream) {
+      toast('Trình duyệt này không hỗ trợ quay video từ canvas. Hãy thử Chrome, Edge, Firefox hoặc Safari bản mới.', true);
+      onEnd();
+      return;
+    }
+    const stream = canvas.captureStream(30);
+
+    function attempt(i) {
+      const type = types[i];
+      let rec;
+      try {
+        rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 12e6 });
+      } catch (err) {
+        if (i + 1 < types.length) return attempt(i + 1);
+        toast('Không khởi tạo được bộ quay video: ' + err.message, true);
+        return onEnd();
+      }
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        current = null;
+        const blob = new Blob(chunks, { type: type.split(';')[0] });
+        if (blob.size > 0) {
+          download(blob, `contour-lines-${stamp()}.${type.includes('mp4') ? 'mp4' : 'webm'}`);
+          toast(`Đã lưu video (${(blob.size / 1e6).toFixed(1)} MB, ${type.split(';')[0]}).`);
+          onEnd();
+        } else if (i + 1 < types.length) {
+          toast(`File ${type} bị rỗng, đang quay lại với ${types[i + 1]}…`, true);
+          attempt(i + 1);
+        } else {
+          toast('Quay video thất bại: mọi định dạng đều cho file rỗng.', true);
+          onEnd();
+        }
+      };
+      onStart();
+      current = rec;
+      rec.start(250);
+      setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, seconds * 1000 + 100);
+    }
+    attempt(0);
+  }
+
+  function stop() {
+    if (current && current.state === 'recording') current.stop();
+  }
+
+  // Preset JSON: { app, version, state }
+  const APP = 'contour-lines-lab';
+  function savePreset(state) {
+    const blob = new Blob([JSON.stringify({ app: APP, version: 1, state }, null, 2)], { type: 'application/json' });
+    download(blob, `contour-lines-preset-${stamp()}.json`);
+  }
+
+  // Đọc file preset → { state, rejected } đã làm sạch (chỉ nhận khoá hợp lệ, đúng kiểu).
+  function readPreset(file) {
+    return file.text().then((text) => {
+      const data = JSON.parse(text);
+      if (!data || typeof data !== 'object' || !data.state) throw new Error('thiếu trường "state"');
+      if (data.app && data.app !== APP) throw new Error(`file của ứng dụng khác ("${data.app}")`);
+      return CL.presets.sanitize(data.state);
+    });
+  }
+
+  return { png, video, stop, savePreset, readPreset, download };
+})();
