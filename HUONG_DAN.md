@@ -23,9 +23,9 @@ Mọi tham số đều có chú thích tiếng Việt ngay trên giao diện và
 
 ## 1. Tóm tắt trong 30 giây
 
-- **Hiệu ứng là gì:** ảnh đi qua 7 bước nối tiếp, giống chồng layer trong Photoshop: ảnh gốc → rung, uốn → tách nét viền → làm mờ → rắc ký tự ASCII → phủ khối MacPaint → phủ texture photocopy.
+- **Hiệu ứng là gì:** ảnh đi qua 7 bước nối tiếp, giống chồng layer trong Photoshop: ảnh gốc → rung, co giãn theo chuột → tách nét viền → làm mờ → rắc ký tự ASCII → phủ khối MacPaint → phủ texture photocopy.
 - **Công nghệ:** HTML + JavaScript + **WebGL**. Mỗi bước là một hoặc vài **shader** viết bằng **GLSL**, chạy trên card đồ hoạ (GPU). Không dùng AI, không có server.
-- **Chuyển động:** máy tự sinh. Thời gian bị làm tròn thành 8 bước mỗi giây, và mọi giá trị ngẫu nhiên đều lấy theo số bước, nên hình giật như stop-motion.
+- **Chuyển động:** có hai nguồn. (1) Máy tự sinh: thời gian bị làm tròn thành 7 bước mỗi giây (đo từ video mẫu: 6,97), mọi giá trị ngẫu nhiên đều lấy theo số bước, nên hình giật như stop-motion. (2) Con trỏ chuột: rê qua ảnh thì lưới "thạch" co giãn theo; không đụng chuột thì lưới đứng phẳng.
 - **Lĩnh vực:** xử lý ảnh thời gian thực và hoạt hình sinh bằng code, thuộc mảng *creative coding*.
 
 ---
@@ -76,6 +76,8 @@ Mẹo học: bấm lần lượt các nút **0 → 6** dưới ảnh (hoặc ph�
 
 Thu phóng ảnh về độ phân giải xử lý. Ảnh PNG có nền trong suốt được lót trắng: `mix(trắng, màu, alpha)`.
 
+Trước bước này, `main.js` đã cắt ảnh theo **Khung** đang chọn (1:1, 4:5, 16:9…) ngay trên CPU, kiểu *cover*: giữ trọn một chiều, xén cân chiều còn lại. Nhờ cắt sẵn nên pipeline và shader không phải biết gì về khung hình. Ảnh gốc chưa cắt được giữ lại (`sourceRaw`), nên đổi khung bao nhiêu lần cũng cắt lại từ bản gốc, không mờ dần.
+
 ### Bước 1: Chuyển động (shader `motion`)
 
 Bước này **không đổi màu, chỉ đổi chỗ đọc ảnh**. Pixel ở `p` lấy màu tại một điểm `p'` hơi lệch:
@@ -113,7 +115,7 @@ Làm mờ nét rồi trộn lại 30% với nét gốc, để nét mềm và b�
 2. **Chuẩn hoá:** nét chỉ dày khoảng 2 px, blur rộng làm nó nhạt đi rất nhiều. Hệ số `norm = σ·√(2π) / độ dày nét` nhân ngược lại, đúng bằng lượng nét bị pha loãng khi blur một đường thẳng.
 3. Chia ảnh thành ô to. Ô nào có mật độ vượt ngưỡng thì tô **hoa văn 1-bit 8×8** (12 mẫu kiểu MacPaint, mỗi hàng là 1 byte, bit 1 = chấm mực).
 4. Trộn 40% nên bàn cờ 50% ra màu xám khoảng 0.8, thành các **khối xám bậc thang ôm quanh nét**.
-5. Khi Chuyển động bật, cỡ ô nhảy ngẫu nhiên theo khung.
+5. Cỡ ô to nhỏ theo **vòng 6 giây đo từ video** (mặc định, xem mục 4.9). Nếu tắt kiểu này (*Cỡ ô theo thời gian* = Tắt) thì cỡ ô nhảy ngẫu nhiên mỗi khung theo thanh *Nhảy cỡ ô*.
 
 ### Bước 6: Texture (shader `texture`)
 
@@ -146,7 +148,7 @@ Mặc định 7 là số đo từ video mẫu, không phải ước lượng: t�
 
 ### Elastic Grid: tấm thạch 2D (`grid.js` + đầu shader `motion`)
 
-Ảnh được chia lưới ô: mỗi cột có bề rộng riêng, mỗi hàng có chiều cao riêng, hàng và cột to nhỏ luân phiên theo nhịp như video. Nhưng khác bản đầu — nơi hai trục hoàn toàn độc lập nên đường lưới luôn thẳng đứng hoặc nằm ngang — bản này mô phỏng **một tấm thạch**: các ô kéo theo nhau, nên đường lưới cong được, xoắn được, và một cú kéo ở giữa khung lan ra xung quanh rồi dội về.
+Ảnh được chia lưới ô (mặc định 5 cột × 8 hàng). Khác các bản đầu — nơi hai trục hoàn toàn độc lập nên đường lưới luôn thẳng đứng hoặc nằm ngang, và lưới tự đổi hình theo nhịp đồng hồ — bản hiện tại mô phỏng **một tấm thạch do con trỏ điều khiển**: rê chuột thì vùng quanh con trỏ bị hút dồn về phía con trỏ, các ô kéo theo nhau nên đường lưới cong, biến dạng lan ra xung quanh rồi dội về. Không đụng chuột thì lưới đứng phẳng.
 
 **1. Lưới nút.** Nút thứ (i, j) nằm CỐ ĐỊNH trên màn hình tại `s = (i/N, j/M)` (y tính từ trên xuống). Giá trị lưu tại nút là `q` — **chỗ đọc ảnh gốc** cho điểm màn hình đó. Nghỉ thì `q = s`; biến dạng là `q` lệch khỏi `s`. Nhờ lưu sẵn chiều "màn hình → ảnh gốc", shader chỉ việc tra bảng, không phải giải ngược gì.
 
@@ -203,13 +205,19 @@ Vì `energy = 0` cho `A = 0`, `forward()` trả về `fwd[i] = i/n`, tức lư�
 
 **6. Nhận chuột.** `interact.js` chỉ ghi lại chỗ con trỏ, không tính gì. Nó nghe `pointermove` trên `window` (không phải trên canvas) để con trỏ đi sát mép hay lướt qua thanh công cụ vẫn còn tác dụng, và nhớ lại `getBoundingClientRect()` vì `pointermove` bắn rất dày. Ra ngoài khung quá 0,15 phần thì gọi `pointerOut()`.
 
+**Ngón tay trên điện thoại.** Màn cảm ứng không có "rê": ngón tay chỉ tồn tại khi đang chạm, nên `interact.js` có nhánh riêng cho `pointerType` khác `'mouse'`:
+- Chỉ nhận ngón tay **đặt xuống trên ảnh** (`pointerdown` trên canvas), và chỉ ngón đầu tiên (nhớ `pointerId`). Ngón bắt đầu ở thanh trượt hay nút thì bỏ qua, nhờ vậy kéo thanh trượt không làm ảnh biến dạng theo.
+- Lúc đặt ngón xuống: gọi `pointerOut()` rồi `pointer()`, để `grid.js` coi đây là "vừa vào khung". Nếu không, quãng từ chỗ nhấc tay lần trước tới chỗ chạm mới bị tính như một cú rê rất dài và ảnh giật mạnh.
+- Nhấc tay (`pointerup` / `pointercancel`) = `pointerOut()`: năng lượng còn lại tự tiêu, ảnh về phẳng.
+- Canvas đặt `touch-action: none` để vuốt trên ảnh không cuộn trang.
+
 Cách này chép đúng hợp đồng chuột của effect.app, đọc được từ bundle `core` của họ: nghe `mousemove` trên `document`, lấy `clientX/clientY` **thô** — không làm mượt, không quán tính ở tầng JS — rồi mỗi khung vẽ đưa vào shader hai vector `iMouse.xy` (khung này) và `iMouse.zw` (khung trước). Độ trễ sinh ra từ vật lý, không từ bộ lọc đầu vào.
 
 **7. Bảng tra gửi cho shader.** Lưới nút thưa (tối đa 17×17) được nội suy **Catmull-Rom** lên bảng 65×65 — mượt tới đạo hàm bậc hai nên không thấy gãy tại nút — rồi nén vào một texture RGBA8: `R,G` = byte cao/thấp của toạ độ X, `B,A` = của toạ độ Y (16 bit mỗi trục, sai số dưới 0.1 px). Shader lấy 4 texel quanh điểm cần đọc, giải nén rồi nội suy tuyến tính (`warpAt`). Vì là bảng **hai chiều**, x mới phụ thuộc cả x lẫn y cũ — đó là khác biệt gốc rễ so với `invX`/`invY` cũ.
 
-**7. Vẽ lại.** Lưới được vẽ theo Frame drop (7 hình/giây) như video. Riêng lúc đang rê chuột, hoặc vừa ngừng mà lưới chưa yên, nếu *Mượt khi tương tác* bật thì vẽ mỗi khung (~60 hình/giây) cho mượt tay.
+**8. Vẽ lại.** Lưới được vẽ theo Frame drop (7 hình/giây) như video. Riêng lúc đang rê chuột, hoặc vừa ngừng mà lưới chưa yên, nếu *Mượt khi tương tác* bật thì vẽ mỗi khung (~60 hình/giây) cho mượt tay. Bấm dừng (Space) thì **đóng băng hẳn**: không chạy vật lý, không nhận chuột, ảnh giữ nguyên hình đang có.
 
-**8. MacPaint theo vòng 6 giây.** Cỡ ô MacPaint trong video to nhỏ theo một nhịp đo được (9 → 45 px, lặp mỗi 6 giây). `pipeline.js` nội suy smoothstep giữa các mốc đó (hàm `videoBitmap`).
+**9. MacPaint theo vòng 6 giây.** Cỡ ô MacPaint trong video to nhỏ theo một nhịp đo được (9 → 45 px, lặp mỗi 6 giây). `pipeline.js` nội suy smoothstep giữa các mốc đó (hàm `videoBitmap`).
 
 **Toạ độ con trỏ.** Canvas dùng `object-fit: contain` nên có viền trống quanh ảnh. Phải trừ viền và chia cho kích thước vùng ảnh để ra toạ độ 0..1 (xem `toUnit()` trong `interact.js`).
 
@@ -222,10 +230,18 @@ Cách này chép đúng hợp đồng chuột của effect.app, đọc được 
 | Blur bán kính lớn thì mẫu nhảy qua nét mảnh, ra sọc | Thu nhỏ ảnh 2× (mỗi lần lấy trung bình 2×2 nhờ lọc LINEAR) cho tới khi các mẫu đủ dày, blur ở ảnh nhỏ, rồi đọc lại | `blurTex()` trong `pipeline.js` |
 | Nét phải dày đúng N px | Khoảng cách tới đường đồng mức ≈ `|v| / |∇v|` | shader `threshold` |
 | Hàm ngẫu nhiên dùng `sin` bị sọc trên GPU yếu | "Hash without Sine" của Dave Hoskins | phần `common` của `shaders.js` |
-| Đọc ảnh cạnh trang bị chặn khi mở bằng `file://` | Mọi ảnh dùng sẵn đều sinh bằng Canvas 2D | `textures.js` |
+| Đọc ảnh cạnh trang bị chặn khi mở bằng `file://` | Ảnh mẫu vẽ bằng Canvas 2D; ảnh mở sẵn nhúng thành data URI (cùng nguồn nên WebGL đọc được) | `textures.js`, `sample-image.js` (sinh bởi `make-sample.py`) |
+| Đổi khung hình mà không làm shader phức tạp | Cắt ảnh kiểu *cover* trên CPU trước khi upload, luôn cắt từ bản gốc | `frameSource()` trong `main.js` |
+| Song ngữ mà không phải đặt mã cho từng chuỗi | Từ điển khoá bằng chính chuỗi tiếng Việt; thiếu bản dịch thì hiện lại tiếng Việt | `make-i18n.py` → `i18n.js`, hàm `CL.t()` |
+| Gửi app cho người không biết code | Gộp CSS + mọi JS + ảnh vào một file HTML | `build.py` → `contour-lines-lab.html` |
+| Gửi bảng biến dạng 2D sang shader mà WebGL1 không có texture số thực | Nén mỗi toạ độ thành 16 bit trong 2 kênh 8 bit | `field()` trong `grid.js`, `warpTexel()` trong shader `motion` |
 | Vẽ nhiều nét với `ctx.filter = blur()` rất chậm | Vẽ hết lên canvas phụ, blur đúng 1 lần | ảnh mẫu trong `textures.js` |
 | Mép ô ASCII bị kẻ vạch do mipmap | Đọc atlas với bias −0.5 | shader `ascii` |
 | Mất GPU giữa chừng | Nghe `webglcontextlost` / `restored`, giữ ảnh gốc trên CPU để dựng lại | `main.js` mục 4 |
+| iPhone: `100vh` cao hơn phần nhìn thấy (thanh địa chỉ che đáy), tai thỏ và vạch Home che nội dung | `height: 100dvh` (chiều cao thật) + `viewport-fit=cover` + `padding: env(safe-area-inset-*)` | `index.html`, cuối `style.css` |
+| iPhone tự phóng to cả trang khi chạm vào ô nhập | Cho chữ trong ô nhập, ô chọn cỡ ≥ 16 px | cuối `style.css` |
+| Lưu ảnh trên iPhone chỉ vào app Tệp, khó tìm | Mở bảng Chia sẻ (`navigator.share` với File), ở đó có "Lưu hình ảnh" vào app Ảnh; tạo File đồng bộ để vẫn nằm trong cú bấm | `png()` trong `export.js` |
+| Manifest báo lỗi đỏ khi mở bằng `file://` | Chỉ gắn thẻ manifest và icon bằng script khi chạy qua http(s) | `<head>` của `index.html` |
 
 ---
 
@@ -239,7 +255,7 @@ Cách học tốt nhất là tự viết lại. Mỗi mốc dưới đây **ch�
 | B | Gradient theo toạ độ `vec4(vUv, 0, 1)` | Góc dưới trái đen, trên phải vàng | — |
 | C | Hiện ảnh, nhớ lật trục Y | Ảnh không lộn ngược | `upload()`, shader `source` |
 | D | Thanh trượt điều khiển uniform | Kéo là đổi ngay | `setUniforms()` |
-| E | Frame drop + camera shake | Ảnh giật 8 lần/giây | shader `motion`, `currentStep` |
+| E | Frame drop + camera shake | Ảnh giật 7 lần/giây | shader `motion`, `currentStep` |
 | F | Threshold fill, rồi edge | Ra nét viền mảnh | shader `threshold` |
 | G | Render target + nối 2 bước | Threshold chạy trên ảnh đã rung | `draw()`, `render()` |
 | H | Blur 2 lượt | Nét mềm | shader `blur`, `blurTex()` |
@@ -316,6 +332,11 @@ Cách nhờ mình hiệu quả nhất: gửi đoạn code + ảnh chụp kết q
 | Tải ảnh không được | HEIC, hoặc kéo ảnh từ web khác | Đọc thông báo cuối màn hình; xem README mục "Đưa ảnh vào" |
 | Video bị vỡ khối | Nhiều hạt nhiễu | Giảm *Hạt* ở lớp Texture, hoặc quay ở 1080 px |
 | Máy nóng, giật | 2400 px quá nặng với GPU | Chọn Xử lý 1080 hoặc 1600 px |
+| Rê chuột mà ảnh không biến dạng | Đang dừng (Space), hoặc lớp Elastic Grid đang tắt | Nhấn Space để chạy; bật công tắc lớp Elastic Grid |
+| Bấm EN mà vẫn còn chữ tiếng Việt | Chuỗi đó mới thêm hoặc vừa sửa, chưa có trong bảng dịch | Thêm cặp Việt–Anh vào `make-i18n.py`, chạy `python3 make-i18n.py` rồi `python3 build.py` |
+| `make-sample.py` báo lỗi `sips` | `sips` chỉ có trên macOS | Trên Windows: tự thu ảnh về 1600 px, lưu đè `assets/xuong-rong.jpg`, rồi chạy `python make-sample.py` không kèm đường dẫn |
+| Chạy `build.py` trên Windows báo `UnicodeEncodeError: 'charmap'` | Console Windows dùng bảng mã cp1252, không in được tiếng Việt | Chạy `python -X utf8 build.py` (tương tự cho hai script còn lại) |
+| Gửi `contour-lines-lab.html` mà người nhận thấy bản cũ | Quên chạy lại `build.py` sau khi sửa code | Chạy `python3 build.py` rồi gửi lại |
 
 ---
 

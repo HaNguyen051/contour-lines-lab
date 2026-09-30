@@ -5,7 +5,7 @@ build.py — gộp cả dự án thành MỘT file HTML tự chứa, để gửi
     python3 build.py                 -> contour-lines-lab.html
 
 Dự án không có bước build thật sự (không bundler, không package.json). Script này chỉ
-nhúng thẳng nội dung css/style.css và 10 file js/*.js vào index.html, giữ nguyên thứ tự
+nhúng thẳng nội dung css/style.css và mọi file js/*.js (hiện là 12 file) vào index.html, giữ nguyên thứ tự
 nạp — thứ tự đó quan trọng vì các file gán lên cùng một object CL.
 Chạy lại script mỗi khi bạn sửa code.
 """

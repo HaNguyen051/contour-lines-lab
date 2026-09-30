@@ -2,8 +2,29 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- viewport-fit=cover: vẽ tràn cả vùng tai thỏ / vạch Home của iPhone; CSS tự chừa chỗ bằng env(safe-area-inset-*) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Contour Lines Lab</title>
+  <!-- "Thêm vào màn hình chính": mở ra toàn màn hình như app, thanh trạng thái trong suốt -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Contour Lines">
+  <meta name="theme-color" content="#2c2c29">
+  <script>
+    // Manifest và icon chỉ gắn khi chạy qua http(s) (GitHub Pages, máy chủ cùng Wi-Fi).
+    // Mở bằng file:// (nhấp đúp, hoặc bản gộp một file) thì trình duyệt chặn đọc manifest
+    // và báo lỗi đỏ trong Console, mà ở đó cũng không "Thêm vào màn hình chính" được.
+    if (/^https?:$/.test(location.protocol)) {
+      [['manifest', 'manifest.webmanifest'], ['apple-touch-icon', 'icons/apple-touch-icon.png'], ['icon', 'icons/icon-192.png']]
+        .forEach(function (x) {
+          var l = document.createElement('link');
+          l.rel = x[0];
+          l.href = x[1];
+          document.head.appendChild(l);
+        });
+    }
+  </script>
   <!-- Font Be Vietnam Pro (cần mạng). Mất mạng thì tự dùng font hệ thống, app vẫn chạy. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -148,10 +169,20 @@ body.dragging .drop-hint { display: flex; }
 .stage canvas.grabbing { cursor: grabbing; }   /* bàn tay nắm: đang kéo */
 
 /* ---------- Bảng điều khiển ---------- */
-.panel {
-  overflow-y: auto;
+/* .sheet = khung chứa: máy tính là cột bên phải, điện thoại là bảng trượt từ dưới lên. */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   border-left: 1px solid var(--line);
   background: var(--panel);
+}
+.sheet-head { display: none; }            /* chỉ hiện trên điện thoại */
+.panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding-bottom: 40px;
 }
 .layer { border-bottom: 1px solid var(--line); }
@@ -237,7 +268,7 @@ body.hide-desc .desc, body.hide-desc .layer-desc { display: none; }
 
 /* ---------- Chế độ xem: chỉ có ảnh ---------- */
 .viewer-bar, .viewer-hint { display: none; }
-body.viewer .topbar, body.viewer .panel, body.viewer .stagebar { display: none; }
+body.viewer .topbar, body.viewer .sheet, body.viewer .stagebar { display: none; }
 body.viewer .layout { grid-template-columns: 1fr; }
 body.viewer .viewer-bar {
   position: fixed;
@@ -257,6 +288,24 @@ body.viewer .viewer-bar {
 }
 body.viewer .viewer-bar:hover, body.viewer .viewer-bar:focus-within { opacity: 1; }
 body.viewer .viewer-bar .btn:not(.primary) { background: #34342f; border-color: #45453f; }
+/* Icon trong nút: nét vẽ theo màu chữ, không tô */
+.ic {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Gợi ý thao tác: chuột cho máy tính, ngón tay cho màn hình cảm ứng */
+body.viewer .viewer-hint.hint-touch { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  body.viewer .viewer-hint.hint-mouse { display: none; }
+  body.viewer .viewer-hint.hint-touch { display: block; }
+  body.viewer .viewer-bar { opacity: 1; }   /* cảm ứng không có "rê qua" để hiện rõ thanh nút */
+}
 body.viewer .viewer-hint {
   display: block;
   position: fixed;
@@ -297,7 +346,8 @@ body.viewer .viewer-hint {
   body { height: auto; min-height: 100%; }
   .layout { grid-template-columns: 1fr; }
   .viewport { height: 72vh; }
-  .panel { border-left: none; border-top: 1px solid var(--line); overflow: visible; }
+  .sheet { border-left: none; border-top: 1px solid var(--line); }
+  .panel { overflow: visible; }
   body.viewer .viewport { height: 100vh; }
   .grow { display: none; }
 }
@@ -305,6 +355,193 @@ body.viewer .viewer-hint {
 /* Nút đổi ngôn ngữ VI / EN. Nút đang chọn mang thêm class "primary" (main.js gán). */
 .langsw { display: inline-flex; gap: 2px; }
 .btn-lang { padding: 6px 9px; min-width: 34px; font-weight: 600; letter-spacing: .02em; }
+
+/* ==========================================================================
+   ĐIỆN THOẠI (iPhone, Android)
+   Áp dụng khi màn hẹp (≤ 760 px, điện thoại dựng dọc) hoặc màn thấp có cảm ứng
+   (điện thoại xoay ngang). Máy tính và iPad giữ bố cục cũ.
+   ========================================================================== */
+
+/* Chạm cho nhanh: bỏ độ trễ chờ chạm đúp và vệt xám khi chạm (mọi thiết bị). */
+.btn, .stage-btn, .layer > summary, .adv > summary, .sheet-grab {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Giữ ngón tay lâu trên ảnh không bật menu "Lưu ảnh" hay bôi đen chữ của iOS. */
+.stage { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+@media (max-width: 760px), (max-height: 520px) and (pointer: coarse) {
+  /* 100dvh = chiều cao thật đang nhìn thấy (trừ thanh địa chỉ Safari). 100vh để dự phòng máy cũ. */
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body { height: 100vh; height: 100dvh; font-size: 15px; }
+  .topbar { display: none; }                  /* thay bằng thanh nút nổi và đầu bảng trượt */
+  .layout { display: flex; flex-direction: column; height: 100%; background: var(--frame); }
+  .viewport { flex: 1 1 auto; height: auto; min-height: 0; }
+  body.viewer .viewport { height: auto; }
+
+  /* ---------- Chế độ xem: ảnh toàn màn hình, thanh nút to dưới đáy ---------- */
+  /* Chừa chỗ cho tai thỏ ở trên và cho thanh nút + vạch Home ở dưới, để nút không che ảnh. */
+  body.viewer .viewport {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             calc(80px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+  }
+  body.viewer .viewer-bar {
+    left: calc(10px + env(safe-area-inset-left));
+    right: calc(10px + env(safe-area-inset-right));
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    max-width: 440px;
+    margin: 0 auto;                           /* left + right + max-width → nằm giữa */
+    transform: none;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 18px;
+    opacity: 1;
+  }
+  body.viewer .viewer-bar .vb {
+    flex: 1 1 0;
+    flex-direction: column;                   /* icon trên, chữ dưới */
+    justify-content: center;
+    gap: 3px;
+    min-height: 56px;
+    padding: 6px 4px;
+    border-radius: 13px;
+    font-size: 12px;
+  }
+  body.viewer .viewer-bar .ic { width: 23px; height: 23px; }
+  body.viewer .viewer-bar .btn-play { flex: 0 0 58px; font-size: 22px; }
+  body.viewer .viewer-bar .langsw { display: none; }   /* đổi ngôn ngữ nằm trong bảng Tuỳ chỉnh */
+  body.viewer .viewer-hint {
+    top: calc(12px + env(safe-area-inset-top));
+    font-size: 13px;
+    color: #d8d4c8;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+  }
+  .toast { bottom: calc(88px + env(safe-area-inset-bottom)); font-size: 14px; }
+
+  /* ---------- Chế độ tuỳ chỉnh: ảnh nửa trên, bảng trượt nửa dưới ---------- */
+  body:not(.viewer) .viewport {
+    flex: 0 0 auto;
+    height: 46%;                              /* vẫn thấy ảnh đổi khi kéo thanh trượt */
+    padding-top: env(safe-area-inset-top);
+  }
+  body:not(.viewer) .toast { top: calc(10px + env(safe-area-inset-top)); bottom: auto; }
+
+  /* Thanh 7 bước: một hàng, vuốt ngang để xem hết */
+  .stagebar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 6px;
+    padding: 6px 10px 20px;                   /* 20px dưới: chỗ cho góc bo của bảng chồng lên */
+    border-top: none;
+  }
+  .stagebar::-webkit-scrollbar { display: none; }
+  .stage-btn { flex: none; min-height: 36px; padding: 6px 13px; border-radius: 18px; font-size: 14px; }
+
+  .sheet {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: -14px;                        /* chồng nhẹ lên đáy khung ảnh cho ra dáng bảng trượt */
+    border: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, .35);
+    position: relative;
+    z-index: 2;
+    animation: sheet-in .28s cubic-bezier(.2, .8, .2, 1);
+    transition: transform .2s;                /* thả tay khi kéo chưa đủ xa thì trượt về chỗ cũ */
+  }
+  @keyframes sheet-in { from { transform: translateY(35%); opacity: .5; } }
+
+  .sheet-head {
+    display: block;
+    flex: none;
+    padding: 0 calc(12px + env(safe-area-inset-right)) 10px calc(12px + env(safe-area-inset-left));
+    border-bottom: 1px solid var(--line);
+  }
+  /* Thanh nắm: vùng chạm cao 24px, vạch xám ở giữa */
+  .sheet-grab {
+    display: block;
+    width: 100%;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: grab;
+    touch-action: none;
+    position: relative;
+  }
+  .sheet-grab::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 9px;
+    width: 42px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--line);
+    transform: translateX(-50%);
+  }
+  .sheet-row { display: flex; align-items: center; gap: 6px; }
+  .sheet-title { flex: 1; font-size: 18px; }
+  .sheet-row .btn { min-height: 40px; }
+  .sheet-row .btn-lang { min-width: 42px; justify-content: center; }
+  .sheet-row .btn-mode { padding: 6px 18px; }
+  .sheet-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .sheet-actions .btn { flex: 1 1 0; justify-content: center; gap: 6px; min-height: 44px; }
+  .sheet-actions .btn-play { flex: 0 0 56px; font-size: 18px; }
+
+  .panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;             /* cuộn hết bảng thì không kéo cả trang theo */
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(28px + env(safe-area-inset-bottom));
+  }
+
+  /* ---------- Ô điều khiển to, dễ chạm (≥ 44px theo khuyến nghị của Apple) ---------- */
+  .layer > summary { min-height: 54px; padding: 10px 16px; font-size: 16px; }
+  .badge { width: 26px; height: 26px; font-size: 13px; }
+  .switch { width: 48px; height: 28px; border-radius: 14px; }
+  .switch::after { top: 2px; left: 2px; width: 24px; height: 24px; }
+  .switch:checked::after { transform: translateX(20px); }
+  .layer-desc { margin: -2px 16px 10px; font-size: 13px; }
+  .fields { padding: 0 16px 14px; }
+  .field { margin: 16px 0; }
+  .field-head { font-size: 15px; }
+  .value { font-size: 13px; }
+  .field input[type=range] { height: 34px; margin: 2px 0; }
+  .field input[type=checkbox] { width: 22px; height: 22px; }
+  .field-head.check { align-items: center; gap: 10px; min-height: 40px; }
+  /* Cỡ chữ ≥ 16px: iPhone sẽ không tự phóng to cả trang khi chạm vào ô chọn / ô nhập */
+  .field select, .field input[type=text] { min-height: 44px; padding: 8px 10px; font-size: 16px; }
+  .desc { font-size: 13px; }
+  .adv { margin: 0 16px 14px; }
+  .adv > summary { padding: 14px 0 6px; font-size: 14px; }
+
+  /* ---------- Xoay ngang: ảnh bên trái, bảng bên phải ---------- */
+  @media (orientation: landscape) and (max-height: 520px) {
+    body.viewer .viewport { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+    body.viewer .viewer-bar .vb { min-height: 48px; }
+    body:not(.viewer) .layout { flex-direction: row; }
+    body:not(.viewer) .viewport {
+      flex: 1 1 55%;
+      height: auto;
+      padding: env(safe-area-inset-top) 0 0 env(safe-area-inset-left);
+    }
+    body:not(.viewer) .stagebar { padding-bottom: 8px; }
+    body:not(.viewer) .sheet {
+      flex: 0 0 45%;
+      margin-top: 0;
+      border-radius: 0;
+      box-shadow: -8px 0 24px rgba(0, 0, 0, .35);
+      animation-name: sheet-in-side;
+    }
+    body:not(.viewer) .toast { left: 27.5%; max-width: 50%; }   /* thông báo nằm trên vùng ảnh, không che bảng */
+    .sheet-grab { display: none; }            /* xoay ngang không kéo xuống để đóng, dùng nút Xong */
+    .sheet-head { padding-top: 10px; }
+    @keyframes sheet-in-side { from { transform: translateX(35%); opacity: .5; } }
+  }
+}
 
   </style>
 </head>
@@ -349,19 +586,38 @@ body.viewer .viewer-hint {
       </div>
       <nav class="stagebar" id="stagebar" aria-label="Xem kết quả tới bước"></nav>
     </section>
-    <!-- Bảng điều khiển: js/ui.js tự sinh từ js/presets.js -->
-    <aside class="panel" id="panel"></aside>
+    <!-- Máy tính: cột bên phải. Điện thoại: bảng trượt từ dưới lên khi bấm Tuỳ chỉnh. -->
+    <aside class="sheet" id="sheet">
+      <!-- Đầu bảng chỉ hiện trên điện thoại (thay cho thanh công cụ, vốn bị ẩn ở màn hẹp) -->
+      <div class="sheet-head">
+        <button class="sheet-grab" id="sheetGrab" title="Kéo xuống để đóng" aria-label="Kéo xuống để đóng"></button>
+        <div class="sheet-row">
+          <strong class="sheet-title">Tuỳ chỉnh</strong>
+          <span class="langsw"><button class="btn btn-lang" data-lang="vi">VI</button><button class="btn btn-lang" data-lang="en">EN</button></span>
+          <button class="btn primary btn-mode">Xong</button>
+        </div>
+        <div class="sheet-actions">
+          <label class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg><span>Tải ảnh</span><input type="file" class="file-image" accept="image/*" hidden></label>
+          <button class="btn btn-png"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>Lưu PNG</span></button>
+          <button class="btn btn-play" title="Tạm dừng (Space)">⏸</button>
+        </div>
+      </div>
+      <!-- Bảng điều khiển: js/ui.js tự sinh từ js/presets.js -->
+      <div class="panel" id="panel"></div>
+    </aside>
   </main>
 
   <!-- Thanh nút nổi ở chế độ xem -->
+  <!-- Mỗi nút: icon (SVG vẽ sẵn, không cần tải gì) + chữ. Trên điện thoại icon nằm trên, chữ nằm dưới. -->
   <nav class="viewer-bar">
-    <label class="btn">Tải ảnh<input type="file" class="file-image" accept="image/*" hidden></label>
-    <button class="btn btn-play" title="Tạm dừng (Space)">⏸</button>
-    <button class="btn btn-png">Lưu PNG</button>
+    <label class="btn vb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg><span>Tải ảnh</span><input type="file" class="file-image" accept="image/*" hidden></label>
+    <button class="btn vb btn-play" title="Tạm dừng (Space)">⏸</button>
+    <button class="btn vb btn-png"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>Lưu PNG</span></button>
     <span class="langsw"><button class="btn btn-lang" data-lang="vi">VI</button><button class="btn btn-lang" data-lang="en">EN</button></span>
-    <button class="btn primary btn-mode" title="Tuỳ chỉnh (H)">⚙ Tuỳ chỉnh</button>
+    <button class="btn vb primary btn-mode" title="Tuỳ chỉnh (H)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>Tuỳ chỉnh</span></button>
   </nav>
-  <p class="viewer-hint">Rê chuột qua ảnh (không cần bấm): ảnh bị hút về phía con trỏ · ngừng rê: ảnh về phẳng · G hiện lưới · Ctrl+V dán ảnh · H mở tuỳ chỉnh</p>
+  <p class="viewer-hint hint-mouse">Rê chuột qua ảnh (không cần bấm): ảnh bị hút về phía con trỏ · ngừng rê: ảnh về phẳng · G hiện lưới · Ctrl+V dán ảnh · H mở tuỳ chỉnh</p>
+  <p class="viewer-hint hint-touch">Vuốt ngón tay trên ảnh: ảnh co giãn theo tay · nhấc tay: ảnh từ từ về phẳng</p>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -586,6 +842,10 @@ CL.EN = {
   "4:3 · ngang": "4:3 · landscape",
   "3:2 · ngang, máy ảnh": "3:2 · landscape, camera",
   "16:9 · ngang, màn hình": "16:9 · landscape, screen",
+  "Vuốt ngón tay trên ảnh: ảnh co giãn theo tay · nhấc tay: ảnh từ từ về phẳng": "Swipe a finger over the image: it stretches with your finger · lift it: the image slowly flattens back",
+  "Kéo xuống để đóng": "Drag down to close",
+  "Xong": "Done",
+  "Chọn \"Lưu hình ảnh\" để cất vào app Ảnh.": "Choose \"Save Image\" to put it in Photos.",
 };
 
 CL.lang = 'vi';
@@ -643,8 +903,9 @@ CL.gl = (() => {
     if (!gl.getProgramParameter(p, gl.LINK_STATUS) && !gl.isContextLost()) {
       throw new Error(`Lỗi liên kết program "${name}": ${gl.getProgramInfoLog(p)}`);
     }
-    // Ghi lại kiểu của mọi uniform (float, vec4...). Uniform mảng như "uGX[0]" được lưu
+    // Ghi lại kiểu của mọi uniform (float, vec4...). Uniform mảng như "uArr[0]" được lưu
     // theo tên bỏ "[0]", để setUniforms biết gọi uniform1fv hay uniform4fv.
+    // (Hiện không shader nào dùng uniform mảng; giữ lại để dùng về sau.)
     const types = {};
     const count = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) || 0;
     for (let i = 0; i < count; i++) {
@@ -726,7 +987,7 @@ CL.gl = (() => {
   // Gán uniform theo kiểu giá trị:
   //  số / true-false → float (true = 1.0)
   //  mảng 2/3/4 số   → vec2 / vec3 / vec4
-  //  Float32Array    → uniform mảng, ví dụ uniform float uGX[17] (đặt tên "uGX[0]"); kiểu lấy từ shader
+  //  Float32Array    → uniform mảng, ví dụ uniform float uArr[17] (đặt tên "uArr[0]"); kiểu lấy từ shader
   //  WebGLTexture    → sampler2D (tự gán texture unit 0, 1, 2...)
   function setUniforms(gl, prog, uniforms) {
     let unit = 0;
@@ -741,7 +1002,7 @@ CL.gl = (() => {
         gl.bindTexture(gl.TEXTURE_2D, v);
         gl.uniform1i(loc, unit++);
       } else if (v instanceof Float32Array) {
-        // Uniform mảng: đặt tên "uGX[0]" hoặc "uGX", kiểu lấy từ chính shader.
+        // Uniform mảng: đặt tên "uArr[0]" hoặc "uArr", kiểu lấy từ chính shader.
         const t = prog.types[name.replace(/\[0\]$/, '')];
         if (t === gl.FLOAT_VEC4) gl.uniform4fv(loc, v);
         else if (t === gl.FLOAT_VEC3) gl.uniform3fv(loc, v);
@@ -2071,7 +2332,9 @@ CL.createPipeline = function (gl) {
  */
 window.CL = window.CL || {};
 
-CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
+// collapsed = true (điện thoại): các lớp mở ra ở trạng thái gập, chỉ thấy tên lớp và công tắc;
+// chạm vào tên lớp mới hiện các thanh trượt. Bảng ngắn hẳn, dễ tìm đúng lớp cần chỉnh.
+CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage, collapsed = false }) {
   const inputs = {}; // inputs['lớp.khoá'] = { el, valueEl, field, extra }
   const t = (s) => CL.t(s);
 
@@ -2102,7 +2365,7 @@ CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
     for (const layer of CL.presets.SCHEMA) {
       const sec = document.createElement('details');
       sec.className = 'layer';
-      sec.open = true;
+      sec.open = !collapsed;
       sec.dataset.layer = layer.id;
       const badge = layer.step === null ? '✦' : layer.step;
       sec.innerHTML = `<summary><span class="badge">${badge}</span><span class="layer-title">${t(layer.title)}</span></summary>` +
@@ -2343,7 +2606,8 @@ CL.createElasticGrid = function (getParams, getAspect) {
   let tqy = null;              // đích theo trục Y, dùng chung cho mọi cột (dài M+1)
   let fwd = null;              // vị trí đường lưới trên màn hình (tạm, khi dựng đích)
 
-  // Vòm tự chạy của từng trục. pA/pC là vòm phụ, hiện chỉ dùng cho nhịp chậm.
+  // Trạng thái đích của từng trục: u = chỗ con trỏ trên trục, K = độ mạnh (âm = hút,
+  // 0 = phẳng), sg = bề rộng vùng ảnh hưởng. stepCursor() ghi lại mỗi khung hình.
   const axis = { x: { u: 0.5, K: 0, sg: 0.35 }, y: { u: 0.5, K: 0, sg: 0.35 } };
 
   let time = 0;
@@ -2393,7 +2657,7 @@ CL.createElasticGrid = function (getParams, getAspect) {
     if (P.cols !== N || P.rows !== M) build(P.cols, P.rows);
   }
 
-  // ---------- Đích: vòm sin của từng trục, rồi tra ngược ----------
+  // ---------- Đích: bướu lẻ tại con trỏ trên từng trục, rồi tra ngược ----------
   // Vị trí đường lưới trên màn hình:
   //     p(r) = r + K · bump((r − u) / sg) · sin(π r)
   // u = chỗ con trỏ trên trục này, K = độ mạnh (âm = hút), sg = bề rộng vùng ảnh hưởng.
@@ -2541,8 +2805,8 @@ CL.createElasticGrid = function (getParams, getAspect) {
   // Chỉ còn MỘT nguồn chuyển động: con trỏ. Không có nhịp tự chạy theo đồng hồ nữa,
   // nên không đụng chuột thì ảnh đứng phẳng.
   //
-  //  - VỊ TRÍ con trỏ chọn tâm vòm c và dấu biên độ: con trỏ ở nửa nào thì nửa đó giãn
-  //    ra, nửa kia dồn lại. Đúng cách "chạm nhanh" của bản cũ, nay chạy liên tục.
+  //  - VỊ TRÍ con trỏ là tâm bướu u trên mỗi trục: vùng quanh con trỏ bị hút dồn về phía
+  //    con trỏ (hoặc đẩy ra nếu tắt "Chuột hút vào"), ở bất kỳ đâu trong khung.
   //  - CHUYỂN ĐỘNG của con trỏ nạp "năng lượng" 0..1, chính là độ lớn của biên độ.
   //  - Năng lượng luôn tiêu dần. Ngừng rê — kể cả khi con trỏ vẫn nằm trong khung —
   //    thì biên độ về 0, đích thành lưới đều, lò xo đưa ảnh về phẳng.
@@ -2764,9 +3028,17 @@ CL.createElasticGrid = function (getParams, getAspect) {
  * Đây là cách effect.app nhận chuột: nghe mousemove trên document, lấy clientX/clientY
  * THÔ (không làm mượt, không quán tính ở tầng JS), rồi giao cho shader tự xử lý.
  *
- *  - Rê chuột qua ảnh, KHÔNG cần bấm: nửa khung có con trỏ giãn ra, nửa kia dồn lại.
+ *  - Rê chuột qua ảnh, KHÔNG cần bấm: vùng quanh con trỏ bị hút dồn về phía con trỏ.
  *  - Ngừng rê, hoặc đưa chuột ra ngoài: ảnh từ từ trở về phẳng.
  * Bấm chuột không có tác dụng riêng; kéo thả ảnh vào trang vẫn do main.js lo.
+ *
+ * Điện thoại / máy tính bảng không có "rê": ngón tay chỉ tồn tại khi đang chạm. Nên:
+ *  - Đặt ngón tay lên ẢNH rồi vuốt = rê chuột. Chỉ theo ngón đầu tiên.
+ *  - Nhấc tay = đưa chuột ra ngoài: ảnh từ từ về phẳng.
+ *  - Lần chạm sau bắt đầu lại từ chỗ ngón tay mới đặt xuống, không bị tính như một cú
+ *    rê dài từ chỗ nhấc tay lần trước (sẽ làm ảnh giật mạnh).
+ *  - Ngón tay bắt đầu ở chỗ khác (thanh trượt, nút) thì bỏ qua, để kéo thanh trượt trong
+ *    bảng Tuỳ chỉnh không làm ảnh biến dạng theo.
  */
 window.CL = window.CL || {};
 
@@ -2798,10 +3070,42 @@ CL.createInteract = function ({ canvas, getSize, getParams, grid }) {
   // Ra ngoài khung quá ngần này phần thì thôi, để chuột ở góc màn hình không kéo ảnh.
   const MARGIN = 0.15;
 
+  const outside = (p, m) => p.sx < -m || p.sx > 1 + m || p.sy < -m || p.sy > 1 + m;
+
+  // ---------- Ngón tay (và bút cảm ứng) ----------
+  let touchId = null;   // pointerId của ngón đang điều khiển; null = không có ngón nào
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || touchId !== null || !getParams().enabled) return;
+    const p = toUnit(e);
+    if (outside(p, 0)) return;                      // chạm vào viền trống quanh ảnh: bỏ qua
+    touchId = e.pointerId;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* không quan trọng */ }
+    grid.pointerOut();                              // quên chỗ nhấc tay lần trước…
+    grid.pointer(p.sx, p.sy);                       // …và bắt đầu lại đúng chỗ ngón tay đặt xuống
+  });
+
+  function touchEnd(e) {
+    if (e.pointerId !== touchId) return;
+    touchId = null;
+    grid.pointerOut();                              // nhấc tay: năng lượng còn lại tự tiêu, ảnh về phẳng
+  }
+  window.addEventListener('pointerup', touchEnd);
+  window.addEventListener('pointercancel', touchEnd);
+
+  // ---------- Chuột (rê, không cần bấm) + ngón tay đang vuốt ----------
   window.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') {
+      // Chỉ nhận ngón tay đã đặt xuống trên ảnh. Kéo ra ngoài khung vẫn theo (grid tự kẹp 0..1).
+      if (e.pointerId !== touchId) return;
+      if (!getParams().enabled) { grid.pointerOut(); return; }
+      const p = toUnit(e);
+      grid.pointer(p.sx, p.sy);
+      return;
+    }
     if (!getParams().enabled) { grid.pointerOut(); return; }
     const p = toUnit(e);
-    if (p.sx < -MARGIN || p.sx > 1 + MARGIN || p.sy < -MARGIN || p.sy > 1 + MARGIN) {
+    if (outside(p, MARGIN)) {
       grid.pointerOut();
       return;
     }
@@ -2809,10 +3113,10 @@ CL.createInteract = function ({ canvas, getSize, getParams, grid }) {
   }, { passive: true });
 
   // Chuột rời cửa sổ hoặc đổi tab: ngừng nạp, ảnh tự về phẳng.
-  document.addEventListener('pointerleave', () => grid.pointerOut());
-  window.addEventListener('blur', () => grid.pointerOut());
+  document.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') grid.pointerOut(); });
+  window.addEventListener('blur', () => { touchId = null; grid.pointerOut(); });
 
-  return { isActive: () => false };
+  return { isActive: () => touchId !== null };
 };
 
   </script>
@@ -2837,9 +3141,38 @@ CL.exporter = (() => {
 
   const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
+  // Đổi data URI thành File, làm ĐỒNG BỘ (không await). navigator.share() chỉ được gọi ngay
+  // trong cú bấm của người dùng; nếu chờ canvas.toBlob() (bất đồng bộ) thì Safari có thể từ chối.
+  function dataUrlToFile(url, name) {
+    const bin = atob(url.slice(url.indexOf(',') + 1));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], name, { type: 'image/png' });
+  }
+
+  // Máy cảm ứng có bảng Chia sẻ nhận được file ảnh (iPhone, iPad, Android).
+  const touchShare = () => !!(navigator.canShare && navigator.share &&
+    window.matchMedia && matchMedia('(pointer: coarse)').matches);
+
   // PNG: renderNoFilter() vẽ lại khung hiện tại KHÔNG lọc chống moiré, rồi lấy nội dung canvas.
+  //  - Máy tính: tải file về như thường.
+  //  - Điện thoại: <a download> trên iPhone chỉ cất vào app Tệp, khó tìm. Nên mở bảng Chia sẻ,
+  //    ở đó có "Lưu hình ảnh" để cất thẳng vào app Ảnh. Người dùng bấm Huỷ thì thôi, không báo lỗi.
   function png(canvas, renderNoFilter, toast) {
     renderNoFilter();
+    const name = `contour-lines-${stamp()}.png`;
+    if (touchShare()) {
+      const file = dataUrlToFile(canvas.toDataURL('image/png'), name);
+      if (navigator.canShare({ files: [file] })) {
+        toast(CL.t('Chọn "Lưu hình ảnh" để cất vào app Ảnh.'));
+        navigator.share({ files: [file] }).catch((err) => {
+          if (err && err.name === 'AbortError') return;      // người dùng đóng bảng Chia sẻ
+          download(file, name);                              // trình duyệt từ chối chia sẻ: tải về như cũ
+          toast(CL.t('Đã lưu PNG.'));
+        });
+        return;
+      }
+    }
     canvas.toBlob((blob) => {
       if (!blob) return toast(CL.t('Không tạo được PNG.'), true);
       download(blob, `contour-lines-${stamp()}.png`);
@@ -3009,8 +3342,14 @@ CL.sampleImageData = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXh
   }
 
   const reducedMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Điện thoại: màn cảm ứng và cạnh ngắn của màn hình dưới 700 px (iPhone ~390–440, iPad ≥ 744).
+  // Điện thoại có ít bộ nhớ GPU hơn: 9 render target ở 1600 px ≈ 140 MB dễ làm iOS "mất GPU",
+  // nên mặc định xử lý ở 1080 px (≈ 60 MB). Vẫn đổi được trong ô Xử lý trên máy tính.
+  const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
+  const isPhone = isTouch && Math.min(screen.width, screen.height) < 700;
+  document.documentElement.classList.toggle('is-touch', isTouch);
   let state = CL.presets.build('contour');
-  const settings = { resolution: 1600, stage: 6, playing: !reducedMotion, ratio: 'auto' };
+  const settings = { resolution: isPhone ? 1080 : 1600, stage: 6, playing: !reducedMotion, ratio: 'auto' };
 
   // Khung hình: tỉ lệ rộng/cao. 'auto' = giữ nguyên tỉ lệ ảnh gốc.
   const RATIOS = {
@@ -3038,6 +3377,7 @@ CL.sampleImageData = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXh
   let lost = false;
 
   const ui = CL.createUI({
+    collapsed: isPhone,          // điện thoại: các lớp gập lại, chạm vào tên lớp mới mở ra
     panel: $('#panel'),
     stagebar: $('#stagebar'),
     toastEl: $('#toast'),
@@ -3214,13 +3554,12 @@ CL.sampleImageData = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXh
   // ===========================================================================
 
   // Không lọc theo file.type (nhiều file có type rỗng): để trình duyệt thử giải mã, lỗi thì báo lý do.
+  // Ảnh HEIC (iPhone) cũng cứ thử: chọn từ Thư viện ảnh thì iOS thường tự đổi sang JPEG, và
+  // Safari 17 trở lên đọc được HEIC. Chỉ khi giải mã hỏng mới báo lỗi riêng cho HEIC.
   function loadFile(file) {
     if (!file) return;
     const name = file.name || CL.t('ảnh dán');
-    if (/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(name)) {
-      ui.toast(CL.t('"%1" là ảnh HEIC (iPhone), trình duyệt chưa đọc được. Hãy đổi sang JPG/PNG, hoặc chụp màn hình ảnh đó rồi Ctrl+V.', name), true);
-      return;
-    }
+    const heic = /hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(name);
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
@@ -3230,7 +3569,8 @@ CL.sampleImageData = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXh
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      ui.toast(CL.t('Không đọc được "%1". Hãy dùng ảnh JPG, PNG, WebP, GIF hoặc BMP.', name), true);
+      if (heic) ui.toast(CL.t('"%1" là ảnh HEIC (iPhone), trình duyệt chưa đọc được. Hãy đổi sang JPG/PNG, hoặc chụp màn hình ảnh đó rồi Ctrl+V.', name), true);
+      else ui.toast(CL.t('Không đọc được "%1". Hãy dùng ảnh JPG, PNG, WebP, GIF hoặc BMP.', name), true);
     };
     img.src = url;
   }
@@ -3425,6 +3765,31 @@ CL.sampleImageData = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXh
   // Chế độ xem ↔ tuỳ chỉnh.
   function toggleMode() { document.body.classList.toggle('viewer'); dirty = true; }
   $$('.btn-mode').forEach((b) => (b.onclick = toggleMode));
+
+  // Điện thoại: kéo thanh nắm trên đầu bảng Tuỳ chỉnh xuống để đóng bảng (về chế độ xem).
+  // Bảng đi theo ngón tay; thả khi đã kéo quá 70 px thì đóng, chưa đủ thì trượt về chỗ cũ.
+  const sheet = $('#sheet');
+  const grab = $('#sheetGrab');
+  let grabY = null;
+  grab.addEventListener('pointerdown', (e) => {
+    grabY = e.clientY;
+    try { grab.setPointerCapture(e.pointerId); } catch (err) { /* không quan trọng */ }
+    sheet.style.transition = 'none';
+  });
+  grab.addEventListener('pointermove', (e) => {
+    if (grabY === null) return;
+    sheet.style.transform = `translateY(${Math.max(0, e.clientY - grabY)}px)`;
+  });
+  function grabEnd(e) {
+    if (grabY === null) return;
+    const dy = e.clientY - grabY;
+    grabY = null;
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+    if (dy > 70) toggleMode();
+  }
+  grab.addEventListener('pointerup', grabEnd);
+  grab.addEventListener('pointercancel', grabEnd);
   $('#chkDesc').onchange = (e) => document.body.classList.toggle('hide-desc', !e.target.checked);
 
   // Phím tắt (không chạy khi đang gõ trong ô nhập).

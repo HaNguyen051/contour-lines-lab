@@ -8,9 +8,17 @@
  * Đây là cách effect.app nhận chuột: nghe mousemove trên document, lấy clientX/clientY
  * THÔ (không làm mượt, không quán tính ở tầng JS), rồi giao cho shader tự xử lý.
  *
- *  - Rê chuột qua ảnh, KHÔNG cần bấm: nửa khung có con trỏ giãn ra, nửa kia dồn lại.
+ *  - Rê chuột qua ảnh, KHÔNG cần bấm: vùng quanh con trỏ bị hút dồn về phía con trỏ.
  *  - Ngừng rê, hoặc đưa chuột ra ngoài: ảnh từ từ trở về phẳng.
  * Bấm chuột không có tác dụng riêng; kéo thả ảnh vào trang vẫn do main.js lo.
+ *
+ * Điện thoại / máy tính bảng không có "rê": ngón tay chỉ tồn tại khi đang chạm. Nên:
+ *  - Đặt ngón tay lên ẢNH rồi vuốt = rê chuột. Chỉ theo ngón đầu tiên.
+ *  - Nhấc tay = đưa chuột ra ngoài: ảnh từ từ về phẳng.
+ *  - Lần chạm sau bắt đầu lại từ chỗ ngón tay mới đặt xuống, không bị tính như một cú
+ *    rê dài từ chỗ nhấc tay lần trước (sẽ làm ảnh giật mạnh).
+ *  - Ngón tay bắt đầu ở chỗ khác (thanh trượt, nút) thì bỏ qua, để kéo thanh trượt trong
+ *    bảng Tuỳ chỉnh không làm ảnh biến dạng theo.
  */
 window.CL = window.CL || {};
 
@@ -42,10 +50,42 @@ CL.createInteract = function ({ canvas, getSize, getParams, grid }) {
   // Ra ngoài khung quá ngần này phần thì thôi, để chuột ở góc màn hình không kéo ảnh.
   const MARGIN = 0.15;
 
+  const outside = (p, m) => p.sx < -m || p.sx > 1 + m || p.sy < -m || p.sy > 1 + m;
+
+  // ---------- Ngón tay (và bút cảm ứng) ----------
+  let touchId = null;   // pointerId của ngón đang điều khiển; null = không có ngón nào
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || touchId !== null || !getParams().enabled) return;
+    const p = toUnit(e);
+    if (outside(p, 0)) return;                      // chạm vào viền trống quanh ảnh: bỏ qua
+    touchId = e.pointerId;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* không quan trọng */ }
+    grid.pointerOut();                              // quên chỗ nhấc tay lần trước…
+    grid.pointer(p.sx, p.sy);                       // …và bắt đầu lại đúng chỗ ngón tay đặt xuống
+  });
+
+  function touchEnd(e) {
+    if (e.pointerId !== touchId) return;
+    touchId = null;
+    grid.pointerOut();                              // nhấc tay: năng lượng còn lại tự tiêu, ảnh về phẳng
+  }
+  window.addEventListener('pointerup', touchEnd);
+  window.addEventListener('pointercancel', touchEnd);
+
+  // ---------- Chuột (rê, không cần bấm) + ngón tay đang vuốt ----------
   window.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') {
+      // Chỉ nhận ngón tay đã đặt xuống trên ảnh. Kéo ra ngoài khung vẫn theo (grid tự kẹp 0..1).
+      if (e.pointerId !== touchId) return;
+      if (!getParams().enabled) { grid.pointerOut(); return; }
+      const p = toUnit(e);
+      grid.pointer(p.sx, p.sy);
+      return;
+    }
     if (!getParams().enabled) { grid.pointerOut(); return; }
     const p = toUnit(e);
-    if (p.sx < -MARGIN || p.sx > 1 + MARGIN || p.sy < -MARGIN || p.sy > 1 + MARGIN) {
+    if (outside(p, MARGIN)) {
       grid.pointerOut();
       return;
     }
@@ -53,8 +93,8 @@ CL.createInteract = function ({ canvas, getSize, getParams, grid }) {
   }, { passive: true });
 
   // Chuột rời cửa sổ hoặc đổi tab: ngừng nạp, ảnh tự về phẳng.
-  document.addEventListener('pointerleave', () => grid.pointerOut());
-  window.addEventListener('blur', () => grid.pointerOut());
+  document.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') grid.pointerOut(); });
+  window.addEventListener('blur', () => { touchId = null; grid.pointerOut(); });
 
-  return { isActive: () => false };
+  return { isActive: () => touchId !== null };
 };

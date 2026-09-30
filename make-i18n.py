@@ -225,6 +225,12 @@ P = [
 ("4:3 · ngang","4:3 · landscape",0),
 ("3:2 · ngang, máy ảnh","3:2 · landscape, camera",0),
 ("16:9 · ngang, màn hình","16:9 · landscape, screen",0),
+# ---- điện thoại
+("Vuốt ngón tay trên ảnh: ảnh co giãn theo tay · nhấc tay: ảnh từ từ về phẳng",
+ "Swipe a finger over the image: it stretches with your finger · lift it: the image slowly flattens back",0),
+("Kéo xuống để đóng","Drag down to close",0),
+("Xong","Done",0),
+("Chọn \"Lưu hình ảnh\" để cất vào app Ảnh.","Choose \"Save Image\" to put it in Photos.",0),
 ]
 vi=[p[0] for p in P]
 dup=[x for x in set(vi) if vi.count(x)>1]

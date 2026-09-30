@@ -216,6 +216,10 @@ CL.EN = {
   "4:3 · ngang": "4:3 · landscape",
   "3:2 · ngang, máy ảnh": "3:2 · landscape, camera",
   "16:9 · ngang, màn hình": "16:9 · landscape, screen",
+  "Vuốt ngón tay trên ảnh: ảnh co giãn theo tay · nhấc tay: ảnh từ từ về phẳng": "Swipe a finger over the image: it stretches with your finger · lift it: the image slowly flattens back",
+  "Kéo xuống để đóng": "Drag down to close",
+  "Xong": "Done",
+  "Chọn \"Lưu hình ảnh\" để cất vào app Ảnh.": "Choose \"Save Image\" to put it in Photos.",
 };
 
 CL.lang = 'vi';

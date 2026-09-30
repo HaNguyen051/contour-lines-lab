@@ -55,8 +55,14 @@
   }
 
   const reducedMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Điện thoại: màn cảm ứng và cạnh ngắn của màn hình dưới 700 px (iPhone ~390–440, iPad ≥ 744).
+  // Điện thoại có ít bộ nhớ GPU hơn: 9 render target ở 1600 px ≈ 140 MB dễ làm iOS "mất GPU",
+  // nên mặc định xử lý ở 1080 px (≈ 60 MB). Vẫn đổi được trong ô Xử lý trên máy tính.
+  const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
+  const isPhone = isTouch && Math.min(screen.width, screen.height) < 700;
+  document.documentElement.classList.toggle('is-touch', isTouch);
   let state = CL.presets.build('contour');
-  const settings = { resolution: 1600, stage: 6, playing: !reducedMotion, ratio: 'auto' };
+  const settings = { resolution: isPhone ? 1080 : 1600, stage: 6, playing: !reducedMotion, ratio: 'auto' };
 
   // Khung hình: tỉ lệ rộng/cao. 'auto' = giữ nguyên tỉ lệ ảnh gốc.
   const RATIOS = {
@@ -84,6 +90,7 @@
   let lost = false;
 
   const ui = CL.createUI({
+    collapsed: isPhone,          // điện thoại: các lớp gập lại, chạm vào tên lớp mới mở ra
     panel: $('#panel'),
     stagebar: $('#stagebar'),
     toastEl: $('#toast'),
@@ -260,13 +267,12 @@
   // ===========================================================================
 
   // Không lọc theo file.type (nhiều file có type rỗng): để trình duyệt thử giải mã, lỗi thì báo lý do.
+  // Ảnh HEIC (iPhone) cũng cứ thử: chọn từ Thư viện ảnh thì iOS thường tự đổi sang JPEG, và
+  // Safari 17 trở lên đọc được HEIC. Chỉ khi giải mã hỏng mới báo lỗi riêng cho HEIC.
   function loadFile(file) {
     if (!file) return;
     const name = file.name || CL.t('ảnh dán');
-    if (/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(name)) {
-      ui.toast(CL.t('"%1" là ảnh HEIC (iPhone), trình duyệt chưa đọc được. Hãy đổi sang JPG/PNG, hoặc chụp màn hình ảnh đó rồi Ctrl+V.', name), true);
-      return;
-    }
+    const heic = /hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(name);
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
@@ -276,7 +282,8 @@
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      ui.toast(CL.t('Không đọc được "%1". Hãy dùng ảnh JPG, PNG, WebP, GIF hoặc BMP.', name), true);
+      if (heic) ui.toast(CL.t('"%1" là ảnh HEIC (iPhone), trình duyệt chưa đọc được. Hãy đổi sang JPG/PNG, hoặc chụp màn hình ảnh đó rồi Ctrl+V.', name), true);
+      else ui.toast(CL.t('Không đọc được "%1". Hãy dùng ảnh JPG, PNG, WebP, GIF hoặc BMP.', name), true);
     };
     img.src = url;
   }
@@ -471,6 +478,31 @@
   // Chế độ xem ↔ tuỳ chỉnh.
   function toggleMode() { document.body.classList.toggle('viewer'); dirty = true; }
   $$('.btn-mode').forEach((b) => (b.onclick = toggleMode));
+
+  // Điện thoại: kéo thanh nắm trên đầu bảng Tuỳ chỉnh xuống để đóng bảng (về chế độ xem).
+  // Bảng đi theo ngón tay; thả khi đã kéo quá 70 px thì đóng, chưa đủ thì trượt về chỗ cũ.
+  const sheet = $('#sheet');
+  const grab = $('#sheetGrab');
+  let grabY = null;
+  grab.addEventListener('pointerdown', (e) => {
+    grabY = e.clientY;
+    try { grab.setPointerCapture(e.pointerId); } catch (err) { /* không quan trọng */ }
+    sheet.style.transition = 'none';
+  });
+  grab.addEventListener('pointermove', (e) => {
+    if (grabY === null) return;
+    sheet.style.transform = `translateY(${Math.max(0, e.clientY - grabY)}px)`;
+  });
+  function grabEnd(e) {
+    if (grabY === null) return;
+    const dy = e.clientY - grabY;
+    grabY = null;
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+    if (dy > 70) toggleMode();
+  }
+  grab.addEventListener('pointerup', grabEnd);
+  grab.addEventListener('pointercancel', grabEnd);
   $('#chkDesc').onchange = (e) => document.body.classList.toggle('hide-desc', !e.target.checked);
 
   // Phím tắt (không chạy khi đang gõ trong ô nhập).

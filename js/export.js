@@ -18,9 +18,38 @@ CL.exporter = (() => {
 
   const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
+  // Đổi data URI thành File, làm ĐỒNG BỘ (không await). navigator.share() chỉ được gọi ngay
+  // trong cú bấm của người dùng; nếu chờ canvas.toBlob() (bất đồng bộ) thì Safari có thể từ chối.
+  function dataUrlToFile(url, name) {
+    const bin = atob(url.slice(url.indexOf(',') + 1));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], name, { type: 'image/png' });
+  }
+
+  // Máy cảm ứng có bảng Chia sẻ nhận được file ảnh (iPhone, iPad, Android).
+  const touchShare = () => !!(navigator.canShare && navigator.share &&
+    window.matchMedia && matchMedia('(pointer: coarse)').matches);
+
   // PNG: renderNoFilter() vẽ lại khung hiện tại KHÔNG lọc chống moiré, rồi lấy nội dung canvas.
+  //  - Máy tính: tải file về như thường.
+  //  - Điện thoại: <a download> trên iPhone chỉ cất vào app Tệp, khó tìm. Nên mở bảng Chia sẻ,
+  //    ở đó có "Lưu hình ảnh" để cất thẳng vào app Ảnh. Người dùng bấm Huỷ thì thôi, không báo lỗi.
   function png(canvas, renderNoFilter, toast) {
     renderNoFilter();
+    const name = `contour-lines-${stamp()}.png`;
+    if (touchShare()) {
+      const file = dataUrlToFile(canvas.toDataURL('image/png'), name);
+      if (navigator.canShare({ files: [file] })) {
+        toast(CL.t('Chọn "Lưu hình ảnh" để cất vào app Ảnh.'));
+        navigator.share({ files: [file] }).catch((err) => {
+          if (err && err.name === 'AbortError') return;      // người dùng đóng bảng Chia sẻ
+          download(file, name);                              // trình duyệt từ chối chia sẻ: tải về như cũ
+          toast(CL.t('Đã lưu PNG.'));
+        });
+        return;
+      }
+    }
     canvas.toBlob((blob) => {
       if (!blob) return toast(CL.t('Không tạo được PNG.'), true);
       download(blob, `contour-lines-${stamp()}.png`);

@@ -81,7 +81,8 @@ CL.createElasticGrid = function (getParams, getAspect) {
   let tqy = null;              // đích theo trục Y, dùng chung cho mọi cột (dài M+1)
   let fwd = null;              // vị trí đường lưới trên màn hình (tạm, khi dựng đích)
 
-  // Vòm tự chạy của từng trục. pA/pC là vòm phụ, hiện chỉ dùng cho nhịp chậm.
+  // Trạng thái đích của từng trục: u = chỗ con trỏ trên trục, K = độ mạnh (âm = hút,
+  // 0 = phẳng), sg = bề rộng vùng ảnh hưởng. stepCursor() ghi lại mỗi khung hình.
   const axis = { x: { u: 0.5, K: 0, sg: 0.35 }, y: { u: 0.5, K: 0, sg: 0.35 } };
 
   let time = 0;
@@ -131,7 +132,7 @@ CL.createElasticGrid = function (getParams, getAspect) {
     if (P.cols !== N || P.rows !== M) build(P.cols, P.rows);
   }
 
-  // ---------- Đích: vòm sin của từng trục, rồi tra ngược ----------
+  // ---------- Đích: bướu lẻ tại con trỏ trên từng trục, rồi tra ngược ----------
   // Vị trí đường lưới trên màn hình:
   //     p(r) = r + K · bump((r − u) / sg) · sin(π r)
   // u = chỗ con trỏ trên trục này, K = độ mạnh (âm = hút), sg = bề rộng vùng ảnh hưởng.
@@ -279,8 +280,8 @@ CL.createElasticGrid = function (getParams, getAspect) {
   // Chỉ còn MỘT nguồn chuyển động: con trỏ. Không có nhịp tự chạy theo đồng hồ nữa,
   // nên không đụng chuột thì ảnh đứng phẳng.
   //
-  //  - VỊ TRÍ con trỏ chọn tâm vòm c và dấu biên độ: con trỏ ở nửa nào thì nửa đó giãn
-  //    ra, nửa kia dồn lại. Đúng cách "chạm nhanh" của bản cũ, nay chạy liên tục.
+  //  - VỊ TRÍ con trỏ là tâm bướu u trên mỗi trục: vùng quanh con trỏ bị hút dồn về phía
+  //    con trỏ (hoặc đẩy ra nếu tắt "Chuột hút vào"), ở bất kỳ đâu trong khung.
   //  - CHUYỂN ĐỘNG của con trỏ nạp "năng lượng" 0..1, chính là độ lớn của biên độ.
   //  - Năng lượng luôn tiêu dần. Ngừng rê — kể cả khi con trỏ vẫn nằm trong khung —
   //    thì biên độ về 0, đích thành lưới đều, lò xo đưa ảnh về phẳng.

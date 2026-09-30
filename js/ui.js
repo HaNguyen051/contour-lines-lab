@@ -4,7 +4,9 @@
  */
 window.CL = window.CL || {};
 
-CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
+// collapsed = true (điện thoại): các lớp mở ra ở trạng thái gập, chỉ thấy tên lớp và công tắc;
+// chạm vào tên lớp mới hiện các thanh trượt. Bảng ngắn hẳn, dễ tìm đúng lớp cần chỉnh.
+CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage, collapsed = false }) {
   const inputs = {}; // inputs['lớp.khoá'] = { el, valueEl, field, extra }
   const t = (s) => CL.t(s);
 
@@ -35,7 +37,7 @@ CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
     for (const layer of CL.presets.SCHEMA) {
       const sec = document.createElement('details');
       sec.className = 'layer';
-      sec.open = true;
+      sec.open = !collapsed;
       sec.dataset.layer = layer.id;
       const badge = layer.step === null ? '✦' : layer.step;
       sec.innerHTML = `<summary><span class="badge">${badge}</span><span class="layer-title">${t(layer.title)}</span></summary>` +

@@ -39,8 +39,9 @@ CL.gl = (() => {
     if (!gl.getProgramParameter(p, gl.LINK_STATUS) && !gl.isContextLost()) {
       throw new Error(`Lỗi liên kết program "${name}": ${gl.getProgramInfoLog(p)}`);
     }
-    // Ghi lại kiểu của mọi uniform (float, vec4...). Uniform mảng như "uGX[0]" được lưu
+    // Ghi lại kiểu của mọi uniform (float, vec4...). Uniform mảng như "uArr[0]" được lưu
     // theo tên bỏ "[0]", để setUniforms biết gọi uniform1fv hay uniform4fv.
+    // (Hiện không shader nào dùng uniform mảng; giữ lại để dùng về sau.)
     const types = {};
     const count = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) || 0;
     for (let i = 0; i < count; i++) {
@@ -122,7 +123,7 @@ CL.gl = (() => {
   // Gán uniform theo kiểu giá trị:
   //  số / true-false → float (true = 1.0)
   //  mảng 2/3/4 số   → vec2 / vec3 / vec4
-  //  Float32Array    → uniform mảng, ví dụ uniform float uGX[17] (đặt tên "uGX[0]"); kiểu lấy từ shader
+  //  Float32Array    → uniform mảng, ví dụ uniform float uArr[17] (đặt tên "uArr[0]"); kiểu lấy từ shader
   //  WebGLTexture    → sampler2D (tự gán texture unit 0, 1, 2...)
   function setUniforms(gl, prog, uniforms) {
     let unit = 0;
@@ -137,7 +138,7 @@ CL.gl = (() => {
         gl.bindTexture(gl.TEXTURE_2D, v);
         gl.uniform1i(loc, unit++);
       } else if (v instanceof Float32Array) {
-        // Uniform mảng: đặt tên "uGX[0]" hoặc "uGX", kiểu lấy từ chính shader.
+        // Uniform mảng: đặt tên "uArr[0]" hoặc "uArr", kiểu lấy từ chính shader.
         const t = prog.types[name.replace(/\[0\]$/, '')];
         if (t === gl.FLOAT_VEC4) gl.uniform4fv(loc, v);
         else if (t === gl.FLOAT_VEC3) gl.uniform3fv(loc, v);

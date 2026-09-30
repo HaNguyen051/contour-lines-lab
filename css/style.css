@@ -137,10 +137,20 @@ body.dragging .drop-hint { display: flex; }
 .stage canvas.grabbing { cursor: grabbing; }   /* bàn tay nắm: đang kéo */
 
 /* ---------- Bảng điều khiển ---------- */
-.panel {
-  overflow-y: auto;
+/* .sheet = khung chứa: máy tính là cột bên phải, điện thoại là bảng trượt từ dưới lên. */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   border-left: 1px solid var(--line);
   background: var(--panel);
+}
+.sheet-head { display: none; }            /* chỉ hiện trên điện thoại */
+.panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding-bottom: 40px;
 }
 .layer { border-bottom: 1px solid var(--line); }
@@ -226,7 +236,7 @@ body.hide-desc .desc, body.hide-desc .layer-desc { display: none; }
 
 /* ---------- Chế độ xem: chỉ có ảnh ---------- */
 .viewer-bar, .viewer-hint { display: none; }
-body.viewer .topbar, body.viewer .panel, body.viewer .stagebar { display: none; }
+body.viewer .topbar, body.viewer .sheet, body.viewer .stagebar { display: none; }
 body.viewer .layout { grid-template-columns: 1fr; }
 body.viewer .viewer-bar {
   position: fixed;
@@ -246,6 +256,24 @@ body.viewer .viewer-bar {
 }
 body.viewer .viewer-bar:hover, body.viewer .viewer-bar:focus-within { opacity: 1; }
 body.viewer .viewer-bar .btn:not(.primary) { background: #34342f; border-color: #45453f; }
+/* Icon trong nút: nét vẽ theo màu chữ, không tô */
+.ic {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Gợi ý thao tác: chuột cho máy tính, ngón tay cho màn hình cảm ứng */
+body.viewer .viewer-hint.hint-touch { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  body.viewer .viewer-hint.hint-mouse { display: none; }
+  body.viewer .viewer-hint.hint-touch { display: block; }
+  body.viewer .viewer-bar { opacity: 1; }   /* cảm ứng không có "rê qua" để hiện rõ thanh nút */
+}
 body.viewer .viewer-hint {
   display: block;
   position: fixed;
@@ -286,7 +314,8 @@ body.viewer .viewer-hint {
   body { height: auto; min-height: 100%; }
   .layout { grid-template-columns: 1fr; }
   .viewport { height: 72vh; }
-  .panel { border-left: none; border-top: 1px solid var(--line); overflow: visible; }
+  .sheet { border-left: none; border-top: 1px solid var(--line); }
+  .panel { overflow: visible; }
   body.viewer .viewport { height: 100vh; }
   .grow { display: none; }
 }
@@ -294,3 +323,190 @@ body.viewer .viewer-hint {
 /* Nút đổi ngôn ngữ VI / EN. Nút đang chọn mang thêm class "primary" (main.js gán). */
 .langsw { display: inline-flex; gap: 2px; }
 .btn-lang { padding: 6px 9px; min-width: 34px; font-weight: 600; letter-spacing: .02em; }
+
+/* ==========================================================================
+   ĐIỆN THOẠI (iPhone, Android)
+   Áp dụng khi màn hẹp (≤ 760 px, điện thoại dựng dọc) hoặc màn thấp có cảm ứng
+   (điện thoại xoay ngang). Máy tính và iPad giữ bố cục cũ.
+   ========================================================================== */
+
+/* Chạm cho nhanh: bỏ độ trễ chờ chạm đúp và vệt xám khi chạm (mọi thiết bị). */
+.btn, .stage-btn, .layer > summary, .adv > summary, .sheet-grab {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Giữ ngón tay lâu trên ảnh không bật menu "Lưu ảnh" hay bôi đen chữ của iOS. */
+.stage { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+@media (max-width: 760px), (max-height: 520px) and (pointer: coarse) {
+  /* 100dvh = chiều cao thật đang nhìn thấy (trừ thanh địa chỉ Safari). 100vh để dự phòng máy cũ. */
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body { height: 100vh; height: 100dvh; font-size: 15px; }
+  .topbar { display: none; }                  /* thay bằng thanh nút nổi và đầu bảng trượt */
+  .layout { display: flex; flex-direction: column; height: 100%; background: var(--frame); }
+  .viewport { flex: 1 1 auto; height: auto; min-height: 0; }
+  body.viewer .viewport { height: auto; }
+
+  /* ---------- Chế độ xem: ảnh toàn màn hình, thanh nút to dưới đáy ---------- */
+  /* Chừa chỗ cho tai thỏ ở trên và cho thanh nút + vạch Home ở dưới, để nút không che ảnh. */
+  body.viewer .viewport {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             calc(80px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+  }
+  body.viewer .viewer-bar {
+    left: calc(10px + env(safe-area-inset-left));
+    right: calc(10px + env(safe-area-inset-right));
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    max-width: 440px;
+    margin: 0 auto;                           /* left + right + max-width → nằm giữa */
+    transform: none;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 18px;
+    opacity: 1;
+  }
+  body.viewer .viewer-bar .vb {
+    flex: 1 1 0;
+    flex-direction: column;                   /* icon trên, chữ dưới */
+    justify-content: center;
+    gap: 3px;
+    min-height: 56px;
+    padding: 6px 4px;
+    border-radius: 13px;
+    font-size: 12px;
+  }
+  body.viewer .viewer-bar .ic { width: 23px; height: 23px; }
+  body.viewer .viewer-bar .btn-play { flex: 0 0 58px; font-size: 22px; }
+  body.viewer .viewer-bar .langsw { display: none; }   /* đổi ngôn ngữ nằm trong bảng Tuỳ chỉnh */
+  body.viewer .viewer-hint {
+    top: calc(12px + env(safe-area-inset-top));
+    font-size: 13px;
+    color: #d8d4c8;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+  }
+  .toast { bottom: calc(88px + env(safe-area-inset-bottom)); font-size: 14px; }
+
+  /* ---------- Chế độ tuỳ chỉnh: ảnh nửa trên, bảng trượt nửa dưới ---------- */
+  body:not(.viewer) .viewport {
+    flex: 0 0 auto;
+    height: 46%;                              /* vẫn thấy ảnh đổi khi kéo thanh trượt */
+    padding-top: env(safe-area-inset-top);
+  }
+  body:not(.viewer) .toast { top: calc(10px + env(safe-area-inset-top)); bottom: auto; }
+
+  /* Thanh 7 bước: một hàng, vuốt ngang để xem hết */
+  .stagebar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 6px;
+    padding: 6px 10px 20px;                   /* 20px dưới: chỗ cho góc bo của bảng chồng lên */
+    border-top: none;
+  }
+  .stagebar::-webkit-scrollbar { display: none; }
+  .stage-btn { flex: none; min-height: 36px; padding: 6px 13px; border-radius: 18px; font-size: 14px; }
+
+  .sheet {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: -14px;                        /* chồng nhẹ lên đáy khung ảnh cho ra dáng bảng trượt */
+    border: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, .35);
+    position: relative;
+    z-index: 2;
+    animation: sheet-in .28s cubic-bezier(.2, .8, .2, 1);
+    transition: transform .2s;                /* thả tay khi kéo chưa đủ xa thì trượt về chỗ cũ */
+  }
+  @keyframes sheet-in { from { transform: translateY(35%); opacity: .5; } }
+
+  .sheet-head {
+    display: block;
+    flex: none;
+    padding: 0 calc(12px + env(safe-area-inset-right)) 10px calc(12px + env(safe-area-inset-left));
+    border-bottom: 1px solid var(--line);
+  }
+  /* Thanh nắm: vùng chạm cao 24px, vạch xám ở giữa */
+  .sheet-grab {
+    display: block;
+    width: 100%;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: grab;
+    touch-action: none;
+    position: relative;
+  }
+  .sheet-grab::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 9px;
+    width: 42px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--line);
+    transform: translateX(-50%);
+  }
+  .sheet-row { display: flex; align-items: center; gap: 6px; }
+  .sheet-title { flex: 1; font-size: 18px; }
+  .sheet-row .btn { min-height: 40px; }
+  .sheet-row .btn-lang { min-width: 42px; justify-content: center; }
+  .sheet-row .btn-mode { padding: 6px 18px; }
+  .sheet-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .sheet-actions .btn { flex: 1 1 0; justify-content: center; gap: 6px; min-height: 44px; }
+  .sheet-actions .btn-play { flex: 0 0 56px; font-size: 18px; }
+
+  .panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;             /* cuộn hết bảng thì không kéo cả trang theo */
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(28px + env(safe-area-inset-bottom));
+  }
+
+  /* ---------- Ô điều khiển to, dễ chạm (≥ 44px theo khuyến nghị của Apple) ---------- */
+  .layer > summary { min-height: 54px; padding: 10px 16px; font-size: 16px; }
+  .badge { width: 26px; height: 26px; font-size: 13px; }
+  .switch { width: 48px; height: 28px; border-radius: 14px; }
+  .switch::after { top: 2px; left: 2px; width: 24px; height: 24px; }
+  .switch:checked::after { transform: translateX(20px); }
+  .layer-desc { margin: -2px 16px 10px; font-size: 13px; }
+  .fields { padding: 0 16px 14px; }
+  .field { margin: 16px 0; }
+  .field-head { font-size: 15px; }
+  .value { font-size: 13px; }
+  .field input[type=range] { height: 34px; margin: 2px 0; }
+  .field input[type=checkbox] { width: 22px; height: 22px; }
+  .field-head.check { align-items: center; gap: 10px; min-height: 40px; }
+  /* Cỡ chữ ≥ 16px: iPhone sẽ không tự phóng to cả trang khi chạm vào ô chọn / ô nhập */
+  .field select, .field input[type=text] { min-height: 44px; padding: 8px 10px; font-size: 16px; }
+  .desc { font-size: 13px; }
+  .adv { margin: 0 16px 14px; }
+  .adv > summary { padding: 14px 0 6px; font-size: 14px; }
+
+  /* ---------- Xoay ngang: ảnh bên trái, bảng bên phải ---------- */
+  @media (orientation: landscape) and (max-height: 520px) {
+    body.viewer .viewport { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+    body.viewer .viewer-bar .vb { min-height: 48px; }
+    body:not(.viewer) .layout { flex-direction: row; }
+    body:not(.viewer) .viewport {
+      flex: 1 1 55%;
+      height: auto;
+      padding: env(safe-area-inset-top) 0 0 env(safe-area-inset-left);
+    }
+    body:not(.viewer) .stagebar { padding-bottom: 8px; }
+    body:not(.viewer) .sheet {
+      flex: 0 0 45%;
+      margin-top: 0;
+      border-radius: 0;
+      box-shadow: -8px 0 24px rgba(0, 0, 0, .35);
+      animation-name: sheet-in-side;
+    }
+    body:not(.viewer) .toast { left: 27.5%; max-width: 50%; }   /* thông báo nằm trên vùng ảnh, không che bảng */
+    .sheet-grab { display: none; }            /* xoay ngang không kéo xuống để đóng, dùng nút Xong */
+    .sheet-head { padding-top: 10px; }
+    @keyframes sheet-in-side { from { transform: translateX(35%); opacity: .5; } }
+  }
+}
