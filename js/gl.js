@@ -95,6 +95,14 @@ CL.gl = (() => {
     if (mipmap) gl.generateMipmap(gl.TEXTURE_2D);
   }
 
+  // Đưa mảng byte RGBA thô vào texture (bảng tra đổi theo từng khung).
+  // Không lật dọc: hàng 0 của mảng là hàng 0 của texture.
+  function uploadData(gl, tex, width, height, data) {
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  }
+
   // Render target RGBA8, LINEAR, CLAMP_TO_EDGE.
   function target(gl, width, height) {
     const tex = texture(gl, { width, height });
@@ -141,5 +149,5 @@ CL.gl = (() => {
     }
   }
 
-  return { program, fullscreenTriangle, texture, upload, target, deleteTarget, setUniforms };
+  return { program, fullscreenTriangle, texture, upload, uploadData, target, deleteTarget, setUniforms };
 })();

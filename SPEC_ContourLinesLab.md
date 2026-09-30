@@ -39,7 +39,7 @@ js/textures.js   atlas ký tự, hoa văn, ảnh mẫu
 js/presets.js    schema tham số + preset
 js/pipeline.js
 js/ui.js         tự sinh bảng điều khiển từ schema
-js/grid.js       [bổ sung] Elastic Grid: lưới hàng/cột đàn hồi
+js/grid.js       [bổ sung] Elastic Grid: tấm thạch 2D (lưới nút nối lò xo)
 js/interact.js   [bổ sung] con trỏ điều khiển lưới
 js/export.js, js/main.js, README.md
 ```
@@ -67,7 +67,7 @@ Thu phóng sao cho cạnh dài bằng độ phân giải đang chọn, lót nề
 - `step = floor(time·fps)`, `t = step/fps`. Chỉ vẽ lại pipeline khi `step` đổi hoặc tham số đổi. Truyền `step % 4096` và `t % 1000` vào shader.
 - **[bổ sung] Vòng lặp liền mạch (tuỳ chọn):** tham số `loop` (giây, 0 = tắt). Khi bật, `step = floor(time·fps) % round(loop·fps)`, nên video quay đúng `loop` giây sẽ lặp lại không bị khựng.
 - Camera shake: mỗi step bốc ngẫu nhiên độ lệch x, y trong `[−shake, shake]` px và góc trong `[−rot, rot]` độ; phóng to `(1 + zoom%)` quanh tâm.
-- **[sửa] Elastic Grid:** lưới hàng/cột đàn hồi, tra ngược từng trục sau camera shake. Xem mục "Elastic Grid đàn hồi theo hàng và cột".
+- **[sửa] Elastic Grid:** tấm thạch 2D, tra bảng biến dạng sau camera shake. Xem mục "Elastic Grid: tấm thạch 2D".
 - "Rung nét" (tuỳ chọn, mặc định 0): phần Elastic nhiễu cũ, `cell = min(W,H)/freq`, `disp = (noise(q + (tt, 1.7·tt)), noise(q + (19.3 − 1.3·tt, 7.1 + tt))) − 0.5`, `p += disp·2·amp`.
 - Đọc ảnh tại `p` (clamp), đổi sang luma, áp Levels: `clamp((l − black)/(white − black), 0, 1)`.
 
@@ -148,32 +148,67 @@ Với `s = min(W,H)/1000`:
 - Khi chỉ có chuột di chuyển thì chạy lại từ bước 1 trở đi. Bước 0 không đổi nên không chạy lại.
 - Khi đang quay video mà `step` không đổi, chỉ chạy lại pass hiển thị, không chạy lại cả pipeline.
 
-## [sửa theo cập nhật 2026-09-26, lần 2] Elastic Grid đàn hồi theo hàng và cột
+## [sửa theo cập nhật 2026-09-27] Elastic Grid: tấm thạch 2D
 
-Bỏ hẳn tương tác "tấm cao su + sóng" và Elastic Grid dạng nhiễu. Thay bằng lưới ô đàn hồi, mô phỏng chuyển động đo từ video mẫu. Mã nguồn: `js/grid.js` (mô hình), `js/interact.js` (con trỏ), đầu shader `motion` (tra ngược).
+Bản trước biến dạng TÁCH TRỤC (`x' = f(x)`, `y' = g(y)`) nên đường lưới luôn thẳng đứng hoặc nằm ngang, nhìn cứng và bị khoá theo trục. Bản này giữ nguyên tiết tấu hàng/cột đo từ video, nhưng chạy nó trên một lưới nút 2D nối lò xo nên biến dạng lan ra được, đường lưới cong và xoắn được. Mã nguồn: `js/grid.js` (mô hình), `js/interact.js` (con trỏ), đầu shader `motion` (tra bảng).
 
-**Mô hình (giống nhau cho trục X và Y)**
-- Toạ độ trục u = 0..1 theo thứ tự màn hình (Y từ trên xuống; shader đổi `y_vUv = 1 − u`).
-- Đường lưới i = 0..N: vị trí nghỉ `r_i = i/N`, vị trí `p_i`, vận tốc `v_i`; `p_0 = 0`, `p_N = 1` cố định.
-- Vòm sin `w(u; c)` (c kẹp 0.05–0.95); đích `T_i = r_i + Σ A_k·w(r_i; c_k)`, gồm tối đa 2 vòm (tự chạy + kéo).
-- Giới hạn một vòm: `−0.65·2c/π ≤ A ≤ 0.65·2(1 − c)/π`.
-- Độ trễ: lưu lịch sử trạng thái đích 3 giây; đường i dùng trạng thái tại `t − d_i`.
-- Lò xo: bước 1/120 s, `a = ω²(T − p) − 2ζωv`. Sau mỗi bước, quét xuôi rồi ngược, giữ khoảng cách tối thiểu 0.3/N; đường bị chặn thì `v *= 0.5`.
-- Tra ngược `inv(s)` dùng chung cho shader và con trỏ.
+**Lưới nút**
+- Nút (i, j), i = 0..N, j = 0..M, nằm cố định trên màn hình tại `s = (i/N, j/M)`, Y từ trên xuống (shader đổi `y_vUv = 1 − y`).
+- Giá trị tại nút là `q` = chỗ đọc ảnh gốc (0..1) cho điểm màn hình đó. Nghỉ: `q = s`. Không cần giải ngược trong shader.
+- Đích của nút = tra ngược vòm sin của từng trục (giữ nguyên công thức cũ): `T_i = r_i + A·w(r_i; c)`, `w` kẹp c trong 0.05–0.95, `−0.65·2c/π ≤ A ≤ 0.65·2(1 − c)/π`, giữ khoảng cách tối thiểu 0.3/N, rồi `inv(s)` ra đích.
+
+**Vật lý** (bước cố định 1/120 s, `e = q − đích`)
+```
+e'' = −ω₀²·e + c²·∇²e − 2ζω₀·e' + β·c²·∇²e'      β = 0.18 s
+ω₀ = 2π·(2.5 · 0.14^soft) Hz      ζ = 1.2 − 0.9·bounce      c = 2.0·jelly
+```
+- `∇²` dùng 4 hàng xóm, bước `hx = 1/N`, `hy = 1/M`; ra ngoài mép thì soi gương (Neumann).
+- Trần ổn định tự động: `c²/hx² + c²/hy² ≤ 0.45/dt²`, và `β·(kx + ky)·dt ≤ 0.5`.
+- Biên: 4 góc ghim; nút cạnh trái/phải giữ `q.x` = 0/1 và `q.y` tự do; cạnh trên/dưới ngược lại. Viền ảnh không bao giờ hở.
+- Sau mỗi bước: kẹp `|q − đích| ≤ 0.40`, rồi quét giữ `q` tăng dần theo hàng và theo cột (khoảng hở tối thiểu 0.22/N, 0.22/M); nút bị chặn thì `v *= 0.5`.
+- `jelly = 0` → các nút rời nhau → tái hiện đúng hành vi tách trục của bản cũ.
 
 **Tự chạy**
-- Bắt đầu: X ở S+ (A = +amp, c 0.33–0.45), Y ở S− (A = −amp, c 0.60–0.66), đặt thẳng `p = T`.
-- Mỗi nhịp đổi một trục (Y, X, Y, X...). Độ trễ: S− → S+ thì `d_i = sweep·(1 − r_i)`; S+ → S− thì `d_i = sweep·r_i`.
-- 1/4 số nhịp là nhịp chậm (0.45 Hz, lan 1.4 s); nhịp sau chờ nhịp chậm lan xong.
-- Bản cài đặt: nhịp thường được rút ngắn để trung bình cả hai loại đúng bằng `beat` (đo 10 phút: 0.80–1.81 s, trung bình 1.31 s).
+- Bắt đầu: X ở S+ (A = +amp, c 0.33–0.45), Y ở S− (A = −amp, c 0.60–0.66), đặt thẳng `q = đích`.
+- Mỗi nhịp đổi một trục (Y, X, Y, X...), giãn cách `beat × rand(0.7, 1.3)`.
+- 1/4 số nhịp là nhịp chậm: tần số × 0.47, giãn cách tối thiểu 1.8 s.
+- Tham số `sweep` đã bỏ: làn sóng nay sinh ra từ số hạng `c²·∇²e`, không cần độ trễ giả nữa.
 
 **Tương tác** (chỉ theo con trỏ đầu tiên; grab / grabbing; `touch-action: none`)
-- Nhấn: tạm dừng tự chạy, ghi `c = inv(s0)` (điểm ảnh gốc dưới ngón tay).
-- Kéo: vòm kéo có tâm c, `A = L·tanh((s − s0)/L)`, với `L = min(dragMax, giới hạn vòm theo dấu)`; trễ `d_i = sweep·|r_i − c|`.
-- Thả: A của vòm kéo về 0 (vẫn trễ từ c); 1.5 s sau tự chạy tiếp.
-- Chạm nhanh (nhả < 250 ms, di chuyển < 6 px): s < 0.5 thì S+ với `c = clamp(s + 0.15, 0.33, 0.5)`; ngược lại S− với `c = clamp(s − 0.15, 0.5, 0.67)`; trễ tính từ điểm chạm.
+- Nhấn: ghi `q₀` = chỗ đọc ảnh gốc dưới ngón tay (nội suy song tuyến từ 4 nút).
+- Kéo: mỗi bước tính `err = q₀ − q(ngón tay)`. Ghì mềm chỉ bắt đầu sau 60% giới hạn: `|err| ≤ 0.6L` thì giữ nguyên, quá thì `0.6L + 0.4L·tanh((|err| − 0.6L)/0.4L)`, với `L = dragMax` — nhờ vậy ảnh bám đúng 1-1 theo con trỏ ở quãng thường dùng.
+- Vùng chịu tay: bán kính `reach` đo theo cạnh NGANG (khoảng cách nhân tỉ lệ cao/rộng để vùng tròn đều trên màn hình). Trọng số `w = 1` trong lõi `d ≤ 0.42`, rồi smoothstep về 0 ở rìa; lõi phẳng này làm cả mảng đi theo tay như một khối thay vì bị bóp quanh con trỏ.
+- Mỗi nút trong vùng nhận `v += (K·w·err − D·w·v)·dt` với `K = max((2π·1.2)², 12ω₀²)`, `D = 1.8√K`, **và** một bước kéo thẳng vị trí `q += 0.22·w·err`. Lực đơn thuần luôn để lại sai số dư (điểm nắm lệch ~2% khung); thêm bước kéo vị trí thì sai số còn ~0.7%.
+- Thả: bỏ lực; 1.2 s sau tự chạy tiếp.
+- Chạm nhanh (nhả < 250 ms, di chuyển < 6 px): đổi vòm như bản cũ (s < 0.5 → S+ với `c = clamp(s + 0.15, 0.33, 0.5)`; ngược lại S− với `c = clamp(s − 0.15, 0.5, 0.67)`), kèm xung vận tốc hướng về điểm chạm, biên độ `1.6·amp`, tắt dần `w·(1 − d)` trong bán kính `reach`.
 
-**Shader bước 1:** `uniform float uGX[17], uGY[17]; uniform float uNX, uNY;`, hai hàm `invX` / `invY`. Thứ tự: toạ độ màn hình → camera shake → tra ngược lưới → (rung nét, mặc định 0) → đọc ảnh → Levels. `setUniforms` lấy kiểu uniform mảng từ `getActiveUniform`, rồi gọi `uniform1fv` hoặc `uniform4fv` cho đúng.
+**Bảng tra và shader bước 1**
+- CPU nội suy Catmull-Rom lưới nút lên bảng 65×65 (hai lượt: theo X rồi theo Y), nén 16 bit mỗi trục vào RGBA8: `R,G` = byte cao/thấp của X, `B,A` = của Y. Tải lên bằng `texImage2D` mỗi khung vẽ (16.9 KB), lọc NEAREST, không lật dọc.
+- `uniform sampler2D uWarp; uniform float uWarpN, uWarpOn;`. `warpTexel` giải nén `(R·256 + G)/257`; `warpAt` lấy 4 texel quanh điểm rồi nội suy song tuyến. Sampler khai báo `highp` khi có `GL_FRAGMENT_PRECISION_HIGH`.
+- Thứ tự: toạ độ màn hình → camera shake → tra bảng lưới → (rung nét, mặc định 0) → đọc ảnh → Levels.
+
+**Vòng lặp vẽ:** vật lý chạy mỗi requestAnimationFrame (tối đa 0.1 s mỗi khung). "Mượt khi tương tác" bật thì vẽ mỗi khung khi đang chạm, hoặc khi đã thả mà còn `|v| > 0.0015`; còn lại vẽ theo Frame drop.
+
+**Tham số** (lớp "Elastic Grid" dưới lớp Chuyển động, có công tắc; thanh đánh dấu ✦ nằm trong mục "Nâng cao"):
+
+| Tham số | Nhãn | Mặc định | Khoảng |
+|---|---|---|---|
+| enabled | | bật | |
+| amp | Độ co giãn | 0.15 | 0–0.3 |
+| jelly | Độ dẻo | 0.55 | 0–1 |
+| soft | Độ mềm | 0.5 | 0–1 |
+| bounce | Độ nảy | 0.5 | 0–1 |
+| reach | Vùng theo tay | 0.8 | 0.2–1.5 |
+| beat | Nhịp | 1.3 s | 0.5–4 |
+| auto | Tự chạy như video | bật | |
+| cols ✦ | Số cột | 8 | 2–16 |
+| rows ✦ | Số hàng | 10 | 2–16 |
+| dragMax ✦ | Kéo xa tối đa | 0.3 | 0.05–0.4 |
+| slow ✦ | Tỉ lệ nhịp chậm | 0.25 | 0–1 |
+| smooth ✦ | Mượt khi tương tác | bật | |
+| showGrid ✦ | Hiện lưới (phím G) | tắt | |
+
+**Bảng điều khiển:** mỗi tham số có thể mang cờ `adv: true`; `ui.js` gom các tham số đó vào một `<details class="adv">` tiêu đề "Nâng cao" ở cuối lớp, để bảng chính chỉ còn vài thanh hay dùng. Lớp Chuyển động: ✦ Rung nét, Rung nét mật độ/tốc độ, Shake độ xoay, Vòng lặp. Threshold: ✦ Độ nhám. ASCII: ✦ Khuếch đại, Độ phủ tối thiểu, Ngẫu nhiên, Độ đậm, Giữ ảnh dưới, Nhấp nháy. MacPaint: ✦ Cỡ ô theo thời gian, Nhảy cỡ ô, Độ lan, Ngưỡng bật ô, Ngẫu nhiên, Cỡ điểm, Giữ ảnh dưới. Texture: ✦ Ngưỡng nền, Mép tờ giấy, Tông ấm.
 
 **MacPaint theo vòng 6 giây:** `macpaint.track` là "video" (mặc định) hoặc "off". Khi là "video", cỡ ô = `cell × K(t)/18`, với `t = thời gian % 6`, nội suy smoothstep qua các mốc (0; 18), (0.9; 9), (1.4; 10), (2.2; 40), (3.0; 10), (3.5; 12), (4.2; 45), (5.4; 18), (6.0; 18); kiểu nhảy cỡ ô ngẫu nhiên bị bỏ qua.
 

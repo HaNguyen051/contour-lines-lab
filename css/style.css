@@ -210,6 +210,17 @@ body.dragging .drop-hint { display: flex; }
   background: var(--panel-2);
 }
 .field input[type=text] { font-family: ui-monospace, Consolas, monospace; }
+.adv { margin: 0 14px 12px; border-top: 1px dashed var(--line); }
+.adv > summary {
+  list-style: none; cursor: pointer; padding: 8px 0 0;
+  color: var(--muted); font-size: 12px; user-select: none;
+}
+.adv > summary::-webkit-details-marker { display: none; }
+.adv > summary::before { content: '▸ '; }
+.adv[open] > summary::before { content: '▾ '; }
+.adv > summary:hover { color: var(--text); }
+.adv .fields { padding: 0; }
+
 .desc { margin-top: 3px; color: var(--muted); font-size: 12px; }
 body.hide-desc .desc, body.hide-desc .layer-desc { display: none; }
 
@@ -279,3 +290,7 @@ body.viewer .viewer-hint {
   body.viewer .viewport { height: 100vh; }
   .grow { display: none; }
 }
+
+/* Nút đổi ngôn ngữ VI / EN. Nút đang chọn mang thêm class "primary" (main.js gán). */
+.langsw { display: inline-flex; gap: 2px; }
+.btn-lang { padding: 6px 9px; min-width: 34px; font-weight: 600; letter-spacing: .02em; }

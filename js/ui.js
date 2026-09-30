@@ -6,11 +6,19 @@ window.CL = window.CL || {};
 
 CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
   const inputs = {}; // inputs['lớp.khoá'] = { el, valueEl, field, extra }
+  const t = (s) => CL.t(s);
+
+  // Tên hoa văn MacPaint có tiền tố số ("7 · Bàn cờ 50%"). Giữ số, chỉ dịch phần chữ,
+  // để từ điển chứa tên sạch thay vì 12 khoá dính số.
+  function optText(s) {
+    const m = /^(\d+ · )(.+)$/.exec(s);
+    return m ? m[1] + t(m[2]) : t(s);
+  }
 
   function fmt(f, v) {
     if (f.type !== 'range') return '';
     const d = String(f.step).includes('.') ? String(f.step).split('.')[1].length : 0;
-    return Number(v).toFixed(d) + (f.unit ? ' ' + f.unit : '');
+    return Number(v).toFixed(d) + (f.unit ? ' ' + CL.t(f.unit) : '');
   }
 
   // Đọc giá trị từ ô nhập, đổi về đúng kiểu dữ liệu của mặc định (số / chuỗi / true-false).
@@ -30,10 +38,24 @@ CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
       sec.open = true;
       sec.dataset.layer = layer.id;
       const badge = layer.step === null ? '✦' : layer.step;
-      sec.innerHTML = `<summary><span class="badge">${badge}</span><span class="layer-title">${layer.title}</span></summary>` +
-        `<p class="layer-desc">${layer.desc}</p><div class="fields"></div>`;
+      sec.innerHTML = `<summary><span class="badge">${badge}</span><span class="layer-title">${t(layer.title)}</span></summary>` +
+        `<p class="layer-desc">${t(layer.desc)}</p><div class="fields"></div>`;
       const summary = sec.querySelector('summary');
       const box = sec.querySelector('.fields');
+
+      // Thanh có cờ adv nằm trong mục "Nâng cao" gập lại, để bảng chính chỉ còn vài thanh chính.
+      let advBox = null;
+      const boxFor = (f) => {
+        if (!f.adv) return box;
+        if (!advBox) {
+          const d = document.createElement('details');
+          d.className = 'adv';
+          d.innerHTML = '<summary>' + t('Nâng cao') + '</summary><div class="fields"></div>';
+          sec.appendChild(d);
+          advBox = d.querySelector('.fields');
+        }
+        return advBox;
+      };
 
       for (const f of layer.fields) {
         const id = `f-${layer.id}-${f.key}`;
@@ -46,13 +68,13 @@ CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
           el.type = 'checkbox';
           el.className = 'switch';
           el.id = id;
-          el.title = 'Bật/tắt lớp này';
+          el.title = t('Bật/tắt lớp này');
           el.addEventListener('click', (e) => e.stopPropagation()); // bấm công tắc không đóng/mở nhóm
           summary.appendChild(el);
         } else {
           const row = document.createElement('div');
           row.className = 'field';
-          row.innerHTML = `<div class="field-head"><label for="${id}">${f.label}</label><span class="value"></span></div>`;
+          row.innerHTML = `<div class="field-head"><label for="${id}">${t(f.label)}</label><span class="value"></span></div>`;
           const head = row.firstChild;
 
           if (f.type === 'range') {
@@ -69,13 +91,13 @@ CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
             head.classList.add('check');
           } else if (f.type === 'select') {
             el = document.createElement('select');
-            for (const [v, t] of f.options) el.add(new Option(t, v));
+            for (const [v, txt] of f.options) el.add(new Option(optText(txt), v));
             row.appendChild(el);
           } else if (f.type === 'ramp') {
             // Ô chọn bộ ký tự dựng sẵn + ô nhập tự do.
             extra = document.createElement('select');
-            for (const [v, t] of f.options) extra.add(new Option(t, v));
-            extra.add(new Option('Tự nhập…', '__custom'));
+            for (const [v, txt] of f.options) extra.add(new Option(optText(txt), v));
+            extra.add(new Option(t('Tự nhập…'), '__custom'));
             row.appendChild(extra);
             el = document.createElement('input');
             el.type = 'text';
@@ -91,10 +113,10 @@ CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
           if (f.desc) {
             const d = document.createElement('div');
             d.className = 'desc';
-            d.textContent = f.desc;
+            d.textContent = t(f.desc);
             row.appendChild(d);
           }
-          box.appendChild(row);
+          boxFor(f).appendChild(row);
         }
 
         const handler = () => {
@@ -132,14 +154,17 @@ CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
 
   // ---------- Thanh 7 bước ----------
   const STAGES = ['Ảnh gốc', 'Chuyển động', 'Threshold', 'Gaussian blur', 'ASCII', 'MacPaint', 'Texture'];
-  STAGES.forEach((name, i) => {
-    const b = document.createElement('button');
-    b.className = 'stage-btn';
-    b.innerHTML = `<b>${i}</b> ${name}`;
-    b.title = `Xem kết quả tới bước ${i} (phím ${i})`;
-    b.onclick = () => onStage(i);
-    stagebar.appendChild(b);
-  });
+  function buildStages() {
+    stagebar.innerHTML = '';
+    STAGES.forEach((name, i) => {
+      const b = document.createElement('button');
+      b.className = 'stage-btn';
+      b.innerHTML = `<b>${i}</b> ${t(name)}`;
+      b.title = CL.t('Xem kết quả tới bước %1 (phím %1)', i);
+      b.onclick = () => onStage(i);
+      stagebar.appendChild(b);
+    });
+  }
   function setStage(n) {
     stagebar.querySelectorAll('.stage-btn').forEach((b, i) => b.classList.toggle('active', i === n));
   }
@@ -154,6 +179,14 @@ CL.createUI = function ({ panel, stagebar, toastEl, onChange, onStage }) {
     timer = setTimeout(() => toastEl.classList.remove('show'), isError ? 7000 : 2800);
   }
 
+  // Đổi ngôn ngữ: dựng lại cả bảng và thanh bước. main.js gọi sync() + setStage() ngay sau,
+  // vì dựng lại làm mất giá trị đang hiển thị trên các ô.
+  function rebuild() {
+    build();
+    buildStages();
+  }
+
   build();
-  return { sync, setStage, toast, inputs };
+  buildStages();
+  return { sync, setStage, toast, inputs, rebuild };
 };

@@ -25,6 +25,7 @@ CL.createPipeline = function (gl) {
   const imageTex = G.texture(gl);                                   // ảnh người dùng / ảnh mẫu
   const patternTex = G.texture(gl, { source: CL.textures.patternAtlas(), filter: gl.NEAREST });
   const atlasTex = G.texture(gl, { width: 512, height: 512, filter: gl.LINEAR, mipmap: true });
+  const warpTex = G.texture(gl, { filter: gl.NEAREST });            // bảng tra Elastic Grid (grid.js)
   let glyphCount = 1;
 
   // --- Render target (tạo lại khi đổi kích thước) ---
@@ -121,7 +122,7 @@ CL.createPipeline = function (gl) {
    * ctx = { state, stage, step, t, grid, foot }
    *   step  : số khung (đã qua frame drop)
    *   t     : thời gian đã làm tròn theo khung
-   *   grid  : uniform Elastic Grid từ grid.js (vị trí các đường lưới)
+   *   warp  : bảng tra Elastic Grid từ grid.js ({ data, size, on })
    *   foot  : cỡ vùng lọc chống moiré (0 = không lọc)
    */
   function render(ctx) {
@@ -144,7 +145,10 @@ CL.createPipeline = function (gl) {
     if (stage >= 1) {
       const mo = st.motion;
       const on = mo.enabled;
-      draw(P.motion, T.s1, Object.assign({
+      const warp = ctx.warp;
+      const warpOn = !!(warp && warp.on);
+      if (warpOn) G.uploadData(gl, warpTex, warp.size, warp.size, warp.data);
+      draw(P.motion, T.s1, {
         uTex: T.s0.tex,
         uRes: [W, H],
         uStep: step,
@@ -157,7 +161,10 @@ CL.createPipeline = function (gl) {
         uZoom: on ? mo.zoom / 100 : 0,
         uBlack: st.source.black,
         uWhite: st.source.white,
-      }, ctx.grid));
+        uWarp: warpTex,
+        uWarpN: warpOn ? warp.size : 1,
+        uWarpOn: warpOn ? 1 : 0,
+      });
       out[1] = T.s1.tex;
     }
 

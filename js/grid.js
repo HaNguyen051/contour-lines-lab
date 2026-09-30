@@ -1,247 +1,491 @@
 /*
- * grid.js — Elastic Grid: lưới hàng/cột đàn hồi (mô phỏng chuyển động trong video Contour Lines).
+ * grid.js — Elastic Grid: tấm "thạch" 2D.
  *
- * Ý tưởng:
- *  - Ảnh chia N cột × M hàng. Mỗi TRỤC (X và Y) xử lý riêng, giống hệt nhau.
- *  - Trên một trục, đường lưới i (i = 0..N) có vị trí nghỉ r_i = i/N và vị trí thật p_i (0..1).
- *    Hai đường mép p_0 = 0, p_N = 1 luôn đứng yên → 4 mép ảnh không bao giờ di chuyển.
- *  - Vị trí đích của đường i = r_i + Σ A·w(r_i; c), với w là "vòm sin": 1 tại c, về 0 ở hai mép.
- *    A > 0: phần trước c giãn ra (ô to), phần sau co lại. A < 0: ngược lại.
- *  - Mỗi đường chạy tới đích như một lò xo tắt dần (vượt đích nhẹ rồi dội lại).
- *  - Độ trễ: mỗi đường nhìn đích của một thời điểm hơi cũ hơn (t − d_i), nên các đường chạy
- *    lần lượt như một làn sóng lan từ mép này sang mép kia.
+ * Bản cũ biến dạng TÁCH TRỤC: x mới chỉ phụ thuộc x cũ, y mới chỉ phụ thuộc y cũ.
+ * Vì vậy đường dọc luôn thẳng đứng, đường ngang luôn nằm ngang — ô chỉ béo/gầy,
+ * không bao giờ cong, nên nhìn cứng và "khung quanh trục x y".
  *
- * Toạ độ trục theo thứ tự màn hình: X từ trái sang phải, Y từ TRÊN xuống (shader tự đổi).
+ * Bản này mô phỏng một tấm thạch: lưới (N+1)×(M+1) NÚT, mỗi nút có vị trí và vận
+ * tốc HAI CHIỀU, các nút nối nhau bằng lò xo. Kéo một chỗ thì chỗ đó lõm vào rồi
+ * sóng lan ra các nút xung quanh và dội lại — đường lưới cong, xoắn, trượt được.
+ *
+ * Toạ độ:
+ *  - Nút thứ (i, j) nằm CỐ ĐỊNH trên màn hình tại s = (i/N, j/M), y tính từ TRÊN xuống.
+ *  - Giá trị lưu tại nút là q = CHỖ ĐỌC ẢNH GỐC cho điểm màn hình đó (0..1).
+ *    Nghỉ thì q = s. Biến dạng = q lệch khỏi s. Shader chỉ việc tra q rồi đọc ảnh,
+ *    không phải giải ngược gì cả.
+ *
+ * Vật lý mỗi nút, với e = q − (đích):
+ *      e'' = −ω₀²·e  +  c²·∇²e  −  2ζω₀·e'  +  β·c²·∇²e'
+ *            ───┬──     ──┬──      ───┬───     ────┬────
+ *          lò xo về đích  nối với  tắt dần    nhớt: dập gợn
+ *                        hàng xóm             li ti, giữ sóng to
+ *
+ *  - "đích" = một bướu LẺ đặt đúng chỗ con trỏ, hai bên dồn về phía con trỏ. Không có
+ *    nhịp tự chạy: không đụng chuột thì ảnh đứng phẳng. Xem "Con trỏ điều khiển biến dạng".
+ *  - c (Độ dẻo) = tốc độ sóng lan. c = 0 → các nút rời nhau → đúng bằng bản cũ.
+ *  - Mép khung: 4 góc ghim chặt; nút trên cạnh chỉ trượt DỌC THEO cạnh. Nhờ vậy
+ *    viền ảnh không bao giờ hở ra ngoài, nhưng bên trong vẫn chảy tự do.
+ *
+ * Mỗi khung vẽ, lưới nút thưa được nội suy Catmull-Rom lên bảng 65×65 (mượt cấp 2,
+ * không gãy tại nút) rồi nén vào texture 16 bit cho shader.
  */
 window.CL = window.CL || {};
 
-CL.createElasticGrid = function (getParams) {
+CL.createElasticGrid = function (getParams, getAspect) {
   'use strict';
-  const DT = 1 / 120;              // bước vật lý cố định (giây)
-  const HIST = 360;                // lưu lịch sử đích 3 giây gần nhất (360 bước × 1/120 s)
-  const SLOW_F = 0.45;             // nhịp chậm: tần số lò xo (Hz)
-  const SLOW_SWEEP = 1.4;          // nhịp chậm: thời gian lan (giây)
-  const S_PLUS = [0.33, 0.45];     // khoảng c của trạng thái S+ (phần đầu to ra)
-  const S_MINUS = [0.60, 0.66];    // khoảng c của trạng thái S− (phần cuối to ra)
+
+  // ---------- Hằng số ----------
+  const DT = 1 / 120;          // bước vật lý cố định (giây)
+  const FIELD = 65;            // cạnh bảng tra gửi cho shader
+  const BETA = 0.18;           // độ nhớt giữa các nút (giây): dập gợn li ti
+  const MAX_E = 0.40;          // nút lệch khỏi đích tối đa bấy nhiêu (chống lộn ngược)
 
   // ---------- Toán ----------
-  const clampC = (c) => Math.min(0.95, Math.max(0.05, c));
-  // Vòm sin: tăng từ 0 lên 1 trên [0, c], giảm từ 1 về 0 trên [c, 1].
-  function arch(u, c) {
-    c = clampC(c);
-    return u <= c ? Math.sin(Math.PI / 2 * u / c) : Math.sin(Math.PI / 2 * (1 - u) / (1 - c));
-  }
-  // Giới hạn biên độ một vòm để ô nhỏ nhất không dưới 0.35× cỡ gốc.
-  function limitA(A, c) {
-    c = clampC(c);
-    return Math.min(0.65 * 2 * (1 - c) / Math.PI, Math.max(-0.65 * 2 * c / Math.PI, A));
-  }
-  const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+  const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-  // ---------- Một trục ----------
-  // state = trạng thái đích: vòm tự chạy (aA, aC) + vòm kéo (pA, pC) + tần số lò xo f.
-  // Trạng thái không bao giờ bị sửa tại chỗ, chỉ thay bằng object mới → lịch sử giữ đúng giá trị cũ.
-  function makeAxis(N, aA, aC) {
-    const ax = { N, r: [], p: [], v: [], d: [], hist: [], state: { aA, aC, pA: 0, pC: 0.5, f: getParams().freq } };
-    for (let i = 0; i <= N; i++) {
-      ax.r.push(i / N);
-      ax.d.push(0);
-      ax.v.push(0);
+  // Khoảng cách trên MÀN HÌNH giữa hai điểm trong hệ 0..1, tính theo cạnh ngang.
+  // Ảnh dọc thì 1 đơn vị y dài hơn 1 đơn vị x, nên phải nhân tỉ lệ, nếu không vùng kéo
+  // sẽ méo thành hình bầu dục.
+  function dist(dx, dy) {
+    const a = getAspect ? getAspect() : 1;          // cao / rộng
+    return Math.hypot(dx, dy * (a > 0 ? a : 1));
+  }
+
+  // Bướu LẺ quanh con trỏ (đạo hàm của Gauss), chuẩn hoá cho đỉnh bằng ±1 tại t = ±1.
+  //
+  //      bump(t) = t · e^(0.5 − t²/2)
+  //
+  //  - bump(0) = 0: chỗ ngay dưới con trỏ ĐỨNG YÊN, nó là mỏ neo.
+  //  - Hai bên lệch dấu nhau, nên nội dung hai phía cùng bị kéo về phía con trỏ.
+  //  - Tắt rất nhanh khi ra xa: quá ~3 lần bề rộng là coi như không còn ảnh hưởng.
+  //
+  // Đây là chỗ khác gốc rễ so với bản vòm sin cũ: vòm cũ trải suốt cả trục và chỉ đổi
+  // được ĐỈNH nằm đâu, nên dấu biên độ phải lật khi con trỏ qua đường giữa — sinh ra
+  // cảm giác biến dạng nhảy giữa 4 góc. Bướu lẻ thì tâm nằm đúng chỗ con trỏ, ở bất kỳ
+  // đâu, và đổi mượt theo con trỏ.
+  function bump(t) {
+    return t * Math.exp(0.5 - 0.5 * t * t);
+  }
+
+  // ---------- Trạng thái ----------
+  let N = 0;                   // số cột ô
+  let M = 0;                   // số hàng ô
+  let qx = null;               // chỗ đọc ảnh gốc tại mỗi nút (Float32Array)
+  let qy = null;
+  let vx = null;               // vận tốc
+  let vy = null;
+  let exArr = null;            // e = q − đích, tính lại mỗi bước (dùng cho ∇²)
+  let eyArr = null;
+  let tqx = null;              // đích theo trục X, dùng chung cho mọi hàng (dài N+1)
+  let tqy = null;              // đích theo trục Y, dùng chung cho mọi cột (dài M+1)
+  let fwd = null;              // vị trí đường lưới trên màn hình (tạm, khi dựng đích)
+
+  // Vòm tự chạy của từng trục. pA/pC là vòm phụ, hiện chỉ dùng cho nhịp chậm.
+  const axis = { x: { u: 0.5, K: 0, sg: 0.35 }, y: { u: 0.5, K: 0, sg: 0.35 } };
+
+  let time = 0;
+  let acc = 0;
+  let interactive = false;
+
+  // ---------- Tham số dẫn xuất (3 thanh trượt dễ hiểu → hằng số vật lý) ----------
+  function tune() {
+    const P = getParams();
+    // Độ mềm 0 → 2.5 Hz (đanh, về đích ngay); 1 → 0.35 Hz (lừ đừ). 0.5 ≈ 0.95 Hz như bản cũ.
+    const freq = 2.5 * Math.pow(0.14, clamp01(P.soft));
+    return {
+      P,
+      w0: 2 * Math.PI * freq,
+      zeta: 1.2 - 0.9 * clamp01(P.bounce),   // 1.2 = về đích không vượt, 0.3 = nảy nhiều
+      wave: 2.0 * clamp01(P.jelly),          // số lần sóng chạy hết khung trong 1 giây
+    };
+  }
+
+  // ---------- Dựng lưới ----------
+  function build(n, m) {
+    N = n;
+    M = m;
+    const len = (N + 1) * (M + 1);
+    qx = new Float32Array(len);
+    qy = new Float32Array(len);
+    vx = new Float32Array(len);
+    vy = new Float32Array(len);
+    exArr = new Float32Array(len);
+    eyArr = new Float32Array(len);
+    tqx = new Float32Array(N + 1);
+    tqy = new Float32Array(M + 1);
+    fwd = new Float32Array(Math.max(N, M) + 1);
+    buildTargets();
+    for (let j = 0; j <= M; j++) {
+      for (let i = 0; i <= N; i++) {
+        const k = j * (N + 1) + i;
+        qx[k] = tqx[i];        // đặt thẳng vào đích, không chạy animation lúc mở trang
+        qy[k] = tqy[j];
+      }
     }
-    for (let i = 0; i <= N; i++) ax.p.push(target(ax, ax.state, i)); // đặt thẳng vào đích, không animate
-    return ax;
+    resampleWeights();
   }
 
-  function target(ax, st, i) {
-    const r = ax.r[i];
-    let T = r + limitA(st.aA, st.aC) * arch(r, st.aC);
-    if (st.pA) T += st.pA * arch(r, st.pC);
-    return T;
+  function syncSize() {
+    const P = getParams();
+    if (P.cols !== N || P.rows !== M) build(P.cols, P.rows);
   }
 
-  function setState(ax, patch, delays) {
-    ax.state = Object.assign({}, ax.state, patch);
-    if (delays) ax.d = delays;
-  }
-
-  // Trạng thái đích ở thời điểm d giây trước.
-  function delayed(ax, d) {
-    const idx = ax.hist.length - 1 - Math.round(d / DT);
-    return ax.hist[Math.max(0, idx)] || ax.state;
-  }
-
-  function stepAxis(ax) {
-    ax.hist.push(ax.state);
-    if (ax.hist.length > HIST) ax.hist.shift();
-    const z = getParams().damping;
-    const N = ax.N;
-    for (let i = 1; i < N; i++) {
-      const st = delayed(ax, ax.d[i]);
-      const w = 2 * Math.PI * st.f;
-      const a = w * w * (target(ax, st, i) - ax.p[i]) - 2 * z * w * ax.v[i];   // lò xo tắt dần
-      ax.v[i] += a * DT;
-      ax.p[i] += ax.v[i] * DT;
+  // ---------- Đích: vòm sin của từng trục, rồi tra ngược ----------
+  // Vị trí đường lưới trên màn hình:
+  //     p(r) = r + K · bump((r − u) / sg) · sin(π r)
+  // u = chỗ con trỏ trên trục này, K = độ mạnh (âm = hút), sg = bề rộng vùng ảnh hưởng.
+  // Thừa số sin(π r) là cửa sổ cho hai mép khung đứng yên, kể cả khi con trỏ sát mép.
+  function forward(st, n) {
+    const K = st.K;
+    const sg = Math.max(0.05, st.sg);
+    fwd[0] = 0;
+    for (let i = 1; i < n; i++) {
+      const r = i / n;
+      fwd[i] = r + K * bump((r - st.u) / sg) * Math.sin(Math.PI * r);
     }
-    // Giữ thứ tự: mỗi ô rộng ít nhất 0.3 cỡ gốc. Quét xuôi rồi quét ngược; đường bị chặn thì hãm vận tốc.
-    const gap = 0.3 / N;
-    ax.p[0] = 0;
-    ax.p[N] = 1;
-    for (let i = 1; i < N; i++) {
-      if (ax.p[i] < ax.p[i - 1] + gap) { ax.p[i] = ax.p[i - 1] + gap; ax.v[i] *= 0.5; }
-    }
-    for (let i = N - 1; i >= 1; i--) {
-      if (ax.p[i] > ax.p[i + 1] - gap) { ax.p[i] = ax.p[i + 1] - gap; ax.v[i] *= 0.5; }
-    }
+    fwd[n] = 1;
+    const gap = 0.3 / n;                                   // ô hẹp nhất = 0.3 cỡ gốc
+    for (let i = 1; i < n; i++) if (fwd[i] < fwd[i - 1] + gap) fwd[i] = fwd[i - 1] + gap;
+    for (let i = n - 1; i >= 1; i--) if (fwd[i] > fwd[i + 1] - gap) fwd[i] = fwd[i + 1] - gap;
   }
 
-  // Tra ngược: điểm màn hình s (0..1) ứng với toạ độ ảnh gốc nào (0..1). Giống invX/invY trong shader.
-  function inv(ax, s) {
-    for (let i = 0; i < ax.N; i++) {
-      if (s <= ax.p[i + 1]) return (i + (s - ax.p[i]) / Math.max(ax.p[i + 1] - ax.p[i], 1e-5)) / ax.N;
+  // Tra ngược: điểm màn hình s nằm giữa hai đường lưới nào → toạ độ ảnh gốc.
+  function invert(n, s) {
+    for (let i = 0; i < n; i++) {
+      if (s <= fwd[i + 1]) return (i + (s - fwd[i]) / Math.max(fwd[i + 1] - fwd[i], 1e-5)) / n;
     }
     return 1;
   }
 
-  // ---------- Khởi tạo: trục X ở S+, trục Y ở S− ----------
-  const P0 = getParams();
-  const axes = {
-    x: makeAxis(P0.cols, P0.amp, rand(...S_PLUS)),
-    y: makeAxis(P0.rows, -P0.amp, rand(...S_MINUS)),
-  };
+  function buildTargets() {
+    forward(axis.x, N);
+    for (let i = 0; i <= N; i++) tqx[i] = invert(N, i / N);
+    forward(axis.y, M);
+    for (let j = 0; j <= M; j++) tqy[j] = invert(M, j / M);
+  }
 
-  let time = 0;            // thời gian mô phỏng (giây)
-  let acc = 0;             // phần dư chưa đủ một bước DT
-  let turn = 'y';          // trục của nhịp kế tiếp: Y, X, Y, X...
-  let nextBeat = P0.beat;
-  let resumeAt = 0;        // sau khi thả tay, chờ tới lúc này mới tự chạy tiếp
-  let dragging = false;
-  let interactive = false; // true từ lúc chạm cho tới khi lưới đứng yên hẳn
-  let drag = null;         // { sx0, sy0, cx, cy }
+  // ---------- Một bước vật lý ----------
+  function step() {
+    const { w0, zeta, wave } = tune();   // w2/dmp dùng ngay bên dưới
+    const row = N + 1;
+    const hx = 1 / N;
+    const hy = 1 / M;
 
-  // Đổi số cột / số hàng: dựng lại trục, giữ nguyên vòm tự chạy hiện tại.
-  function syncSize() {
+    // Hệ số lan sóng, có trần để bước thời gian cố định không bao giờ làm vỡ mô phỏng.
+    let kx = wave * wave / (hx * hx);
+    let ky = wave * wave / (hy * hy);
+    const cap = 0.45 / (DT * DT);
+    if (kx + ky > cap) { const s = cap / (kx + ky); kx *= s; ky *= s; }
+    let beta = BETA;
+    if (beta * (kx + ky) * DT > 0.5) beta = 0.5 / ((kx + ky) * DT);
+
+    // e = lệch khỏi đích. Sóng lan trên e, nên khi yên thì nút nằm ĐÚNG đích.
+    for (let j = 0; j <= M; j++) {
+      for (let i = 0; i <= N; i++) {
+        const k = j * row + i;
+        exArr[k] = qx[k] - tqx[i];
+        eyArr[k] = qy[k] - tqy[j];
+      }
+    }
+
+    const dmp = 2 * zeta * w0;
+    const w2 = w0 * w0;
+    for (let j = 0; j <= M; j++) {
+      const edgeY = j === 0 || j === M;
+      for (let i = 0; i <= N; i++) {
+        const edgeX = i === 0 || i === N;
+        if (edgeX && edgeY) continue;                       // 4 góc: ghim chặt
+        const k = j * row + i;
+        // Hàng xóm; ra ngoài mép thì soi gương (∇² vẫn đúng ở cạnh).
+        const kl = i === 0 ? k + 1 : k - 1;
+        const kr = i === N ? k - 1 : k + 1;
+        const ku = j === 0 ? k + row : k - row;
+        const kd = j === M ? k - row : k + row;
+        const lapEx = kx * (exArr[kl] + exArr[kr] - 2 * exArr[k]) + ky * (exArr[ku] + exArr[kd] - 2 * exArr[k]);
+        const lapEy = kx * (eyArr[kl] + eyArr[kr] - 2 * eyArr[k]) + ky * (eyArr[ku] + eyArr[kd] - 2 * eyArr[k]);
+        const lapVx = kx * (vx[kl] + vx[kr] - 2 * vx[k]) + ky * (vx[ku] + vx[kd] - 2 * vx[k]);
+        const lapVy = kx * (vy[kl] + vy[kr] - 2 * vy[k]) + ky * (vy[ku] + vy[kd] - 2 * vy[k]);
+
+        if (!edgeX) {
+          vx[k] += (-w2 * exArr[k] + lapEx + beta * lapVx - dmp * vx[k]) * DT;
+          qx[k] += vx[k] * DT;
+        }
+        if (!edgeY) {
+          vy[k] += (-w2 * eyArr[k] + lapEy + beta * lapVy - dmp * vy[k]) * DT;
+          qy[k] += vy[k] * DT;
+        }
+      }
+    }
+
+    pin();
+    repair();
+  }
+
+  // Mép khung: góc đứng yên, cạnh chỉ trượt dọc theo cạnh → ảnh không bao giờ hở viền.
+  function pin() {
+    const row = N + 1;
+    for (let j = 0; j <= M; j++) {
+      const a = j * row;
+      const b = j * row + N;
+      qx[a] = 0; vx[a] = 0;
+      qx[b] = 1; vx[b] = 0;
+    }
+    for (let i = 0; i <= N; i++) {
+      const a = i;
+      const b = M * row + i;
+      qy[a] = 0; vy[a] = 0;
+      qy[b] = 1; vy[b] = 0;
+    }
+  }
+
+  // Chống lộn ngược: giữ q tăng dần theo từng hàng / từng cột, và không lệch đích quá xa.
+  function repair() {
+    const row = N + 1;
+    const gapX = 0.22 / N;
+    const gapY = 0.22 / M;
+    for (let j = 0; j <= M; j++) {
+      for (let i = 0; i <= N; i++) {
+        const k = j * row + i;
+        const dx = qx[k] - tqx[i];
+        const dy = qy[k] - tqy[j];
+        if (dx > MAX_E) { qx[k] = tqx[i] + MAX_E; vx[k] *= 0.5; }
+        else if (dx < -MAX_E) { qx[k] = tqx[i] - MAX_E; vx[k] *= 0.5; }
+        if (dy > MAX_E) { qy[k] = tqy[j] + MAX_E; vy[k] *= 0.5; }
+        else if (dy < -MAX_E) { qy[k] = tqy[j] - MAX_E; vy[k] *= 0.5; }
+      }
+      for (let i = 1; i <= N; i++) {
+        const k = j * row + i;
+        if (qx[k] < qx[k - 1] + gapX) { qx[k] = Math.min(1, qx[k - 1] + gapX); vx[k] *= 0.5; }
+      }
+      for (let i = N - 1; i >= 0; i--) {
+        const k = j * row + i;
+        if (qx[k] > qx[k + 1] - gapX) { qx[k] = Math.max(0, qx[k + 1] - gapX); vx[k] *= 0.5; }
+      }
+    }
+    for (let i = 0; i <= N; i++) {
+      for (let j = 1; j <= M; j++) {
+        const k = j * row + i;
+        if (qy[k] < qy[k - row] + gapY) { qy[k] = Math.min(1, qy[k - row] + gapY); vy[k] *= 0.5; }
+      }
+      for (let j = M - 1; j >= 0; j--) {
+        const k = j * row + i;
+        if (qy[k] > qy[k + row] - gapY) { qy[k] = Math.max(0, qy[k + row] - gapY); vy[k] *= 0.5; }
+      }
+    }
+  }
+
+  // ---------- Con trỏ điều khiển biến dạng ----------
+  // Chỉ còn MỘT nguồn chuyển động: con trỏ. Không có nhịp tự chạy theo đồng hồ nữa,
+  // nên không đụng chuột thì ảnh đứng phẳng.
+  //
+  //  - VỊ TRÍ con trỏ chọn tâm vòm c và dấu biên độ: con trỏ ở nửa nào thì nửa đó giãn
+  //    ra, nửa kia dồn lại. Đúng cách "chạm nhanh" của bản cũ, nay chạy liên tục.
+  //  - CHUYỂN ĐỘNG của con trỏ nạp "năng lượng" 0..1, chính là độ lớn của biên độ.
+  //  - Năng lượng luôn tiêu dần. Ngừng rê — kể cả khi con trỏ vẫn nằm trong khung —
+  //    thì biên độ về 0, đích thành lưới đều, lò xo đưa ảnh về phẳng.
+  let cur = { on: false, sx: 0.5, sy: 0.5, psx: 0.5, psy: 0.5 };
+  let energy = 0;
+
+  function pointer(sx, sy) {
+    sx = clamp01(sx);
+    sy = clamp01(sy);
+    if (!cur.on) { cur.psx = sx; cur.psy = sy; }   // vừa vào khung: không tính cú nhảy vào
+    cur.on = true;
+    cur.sx = sx;
+    cur.sy = sy;
+  }
+
+  function pointerOut() {
+    cur.on = false;                                 // năng lượng còn lại tự tiêu
+  }
+
+  // Mỗi KHUNG HÌNH một lần: nạp năng lượng bằng quãng con trỏ vừa đi, cho tiêu bớt, rồi
+  // dựng lại đích. Đọc con trỏ mỗi khung chứ không phải mỗi sự kiện chuột, và lấy vị trí
+  // thô không làm mượt — giống cách effect.app dựng iMouse.
+  function stepCursor(dt, running) {
     const P = getParams();
-    if (axes.x.N !== P.cols) axes.x = makeAxis(P.cols, axes.x.state.aA, axes.x.state.aC);
-    if (axes.y.N !== P.rows) axes.y = makeAxis(P.rows, axes.y.state.aA, axes.y.state.aC);
-  }
+    // Đang tạm dừng: không nạp, không tiêu, giữ nguyên hình. Vẫn kéo theo chỗ con trỏ để
+    // khi chạy lại không bị một cú nhảy vì quãng đường tích luỹ trong lúc dừng.
+    if (!running) { cur.psx = cur.sx; cur.psy = cur.sy; return; }
+    if (cur.on && P.enabled) {
+      const moved = dist(cur.sx - cur.psx, cur.sy - cur.psy);
+      cur.psx = cur.sx;
+      cur.psy = cur.sy;
+      energy = Math.min(1, energy + moved * (P.sens != null ? P.sens : 6));
+    }
+    const tau = Math.max(0.05, P.hold != null ? P.hold : 0.6);
+    energy *= Math.exp(-dt / tau);
+    if (energy < 1e-4) energy = 0;
+    else interactive = true;
 
-  // ---------- Tự chạy như video ----------
-  function beat() {
-    const P = getParams();
-    const ax = axes[turn];
-    const toPlus = ax.state.aA < 0;                      // đang S− → sang S+, và ngược lại
-    const slow = Math.random() < P.slow;
-    const sweep = slow ? SLOW_SWEEP : P.sweep;
-    // S− → S+: nội dung dồn về u = 1, làn sóng bắt đầu từ mép cuối. S+ → S−: bắt đầu từ mép đầu.
-    const delays = ax.r.map((r) => (toPlus ? sweep * (1 - r) : sweep * r));
-    setState(ax, {
-      aA: toPlus ? P.amp : -P.amp,
-      aC: toPlus ? rand(...S_PLUS) : rand(...S_MINUS),
-      f: slow ? SLOW_F : P.freq,
-    }, delays);
-    turn = turn === 'y' ? 'x' : 'y';
-    // Nhịp chậm phải chờ lan xong (≈1.8 s). Nhịp thường được rút ngắn cho bù lại, để trung bình
-    // của cả hai loại đúng bằng "beat": beat = slow·slowGap + (1 − slow)·normalMean.
-    const slowGap = Math.max(P.beat, SLOW_SWEEP + 0.4);
-    const normalMean = P.slow < 1 ? Math.max(0.5, (P.beat - P.slow * slowGap) / (1 - P.slow)) : P.beat;
-    nextBeat = time + (slow ? slowGap : normalMean * rand(0.7, 1.3));
-  }
-
-  // ---------- Tương tác ----------
-  function sweepFrom(ax, c) {
-    const s = getParams().sweep;
-    return ax.r.map((r) => s * Math.abs(r - c));          // gần chỗ tay phản ứng trước, xa thì sau
-  }
-
-  // Giới hạn mềm: kéo càng quá thì càng bị ghì lại (tanh), không bao giờ vượt L.
-  function softPull(A, c) {
-    const P = getParams();
-    const hard = A >= 0 ? 0.65 * 2 * (1 - c) / Math.PI : 0.65 * 2 * c / Math.PI;
-    const L = Math.min(P.dragMax, hard);
-    return L * Math.tanh(A / L);
-  }
-
-  // Nhấn: ghi lại điểm ảnh gốc đang nằm dưới ngón tay. Vòm tự chạy giữ nguyên làm nền.
-  function grab(sx, sy) {
-    const P = getParams();
-    dragging = true;
-    interactive = true;
-    drag = { sx0: sx, sy0: sy, cx: inv(axes.x, sx), cy: inv(axes.y, sy) };
-    setState(axes.x, { pA: 0, pC: drag.cx, f: P.freq }, sweepFrom(axes.x, drag.cx));
-    setState(axes.y, { pA: 0, pC: drag.cy, f: P.freq }, sweepFrom(axes.y, drag.cy));
-  }
-
-  // Kéo: vòm kéo có tâm tại điểm đã nắm. Vì w(c; c) = 1 nên điểm đó đi đúng theo ngón tay.
-  function move(sx, sy) {
-    if (!drag) return;
-    setState(axes.x, { pA: softPull(sx - drag.sx0, drag.cx) });
-    setState(axes.y, { pA: softPull(sy - drag.sy0, drag.cy) });
-  }
-
-  // Thả: vòm kéo về 0 (vẫn trễ tính từ chỗ nắm) → lưới nảy về. 1.5 giây sau mới tự chạy tiếp.
-  function release() {
-    if (!drag) return;
-    setState(axes.x, { pA: 0 });
-    setState(axes.y, { pA: 0 });
-    dragging = false;
-    drag = null;
-    resumeAt = time + 1.5;
-    nextBeat = Math.max(nextBeat, resumeAt);
-  }
-
-  // Chạm nhanh: mỗi trục đổi vòm tự chạy để phía có điểm chạm to ra; chuyển động lan từ điểm chạm.
-  function tap(sx, sy) {
-    const P = getParams();
-    release();
-    interactive = true;
-    [[axes.x, sx], [axes.y, sy]].forEach(([ax, s]) => {
-      const delays = sweepFrom(ax, inv(ax, s));
-      if (s < 0.5) setState(ax, { aA: P.amp, aC: Math.min(0.5, Math.max(0.33, s + 0.15)), f: P.freq }, delays);
-      else setState(ax, { aA: -P.amp, aC: Math.min(0.67, Math.max(0.5, s - 0.15)), f: P.freq }, delays);
-    });
+    // Tâm biến dạng nằm ĐÚNG chỗ con trỏ, không còn lật dấu ở đường giữa nên không còn
+    // hiện tượng nhảy giữa 4 góc. K âm = hút (hai bên dồn về con trỏ), dương = đẩy ra.
+    const K = P.amp * energy * (P.attract === false ? 1 : -1);
+    // Bề rộng vùng ảnh hưởng tính theo cạnh NGANG; trục dọc chia cho tỉ lệ khung để vùng
+    // đó tròn trên màn hình chứ không thành bầu dục ở ảnh dọc.
+    const a = getAspect ? getAspect() : 1;
+    const span = P.span != null ? P.span : 0.35;
+    axis.x.u = cur.sx;
+    axis.x.K = K;
+    axis.x.sg = span;
+    axis.y.u = cur.sy;
+    axis.y.K = K;
+    axis.y.sg = span / (a > 0 ? a : 1);
+    buildTargets();
   }
 
   // ---------- Mỗi khung hình ----------
-  // playing = false thì không tự chạy (nhưng vẫn kéo được).
-  // Trả về { moving, smooth }: smooth = nên vẽ lại mỗi khung (đang chạm hoặc vừa thả mà lưới chưa yên).
+  // playing = false (nút Tạm dừng, phím Space): ĐÓNG BĂNG hoàn toàn. Không chạy vật lý,
+  // không nhận chuột, giữ nguyên hình đang có — nên ảnh đứng im thật, và "Lưu PNG" lúc
+  // dừng lấy đúng khung đang nhìn thấy.
   function update(dtReal, playing) {
     const P = getParams();
     syncSize();
-    acc += Math.min(dtReal, 0.1);
+    const dt = Math.min(dtReal, 0.1);
+    const running = playing !== false;
+    stepCursor(dt, running);
+    if (!running) {
+      acc = 0;                       // bỏ phần dư, chạy lại không dồn một cục bước vật lý
+      return { moving: false, smooth: false };
+    }
+    acc += dt;
     while (acc >= DT) {
       acc -= DT;
       time += DT;
-      if (P.enabled && P.auto && playing && !dragging && time >= resumeAt && time >= nextBeat) beat();
-      stepAxis(axes.x);
-      stepAxis(axes.y);
+      if (P.enabled) step();
     }
     let moving = false;
-    for (const ax of [axes.x, axes.y]) for (const v of ax.v) if (Math.abs(v) > 0.001) moving = true;
-    if (!dragging && !moving) interactive = false;
-    return { moving, smooth: dragging || (interactive && moving) };
-  }
-
-  // Uniform cho shader bước 1. Tắt lớp thì trả về lưới 1×1 (không biến dạng).
-  const gx = new Float32Array(17);
-  const gy = new Float32Array(17);
-  function uniforms() {
-    const on = getParams().enabled;
-    gx.fill(1);
-    gy.fill(1);
-    if (on) {
-      axes.x.p.forEach((v, i) => (gx[i] = v));
-      axes.y.p.forEach((v, i) => (gy[i] = v));
-    } else {
-      gx[0] = 0;
-      gy[0] = 0;
+    for (let k = 0; k < vx.length; k++) {
+      if (Math.abs(vx[k]) > 0.0015 || Math.abs(vy[k]) > 0.0015) { moving = true; break; }
     }
-    return { 'uGX[0]': gx, 'uGY[0]': gy, uNX: on ? axes.x.N : 1, uNY: on ? axes.y.N : 1 };
+    if (!moving && energy === 0) interactive = false;
+    return { moving, smooth: interactive && (moving || energy > 0) };
   }
 
-  // Vị trí các đường lưới (để vẽ lớp "Hiện lưới").
+  // ---------- Bảng tra cho shader ----------
+  // Nội suy Catmull-Rom (mượt cấp 2) từ lưới nút thưa lên FIELD×FIELD, rồi nén 16 bit:
+  //   R,G = byte cao, byte thấp của toạ độ X;  B,A = của toạ độ Y.
+  const fieldData = new Uint8Array(FIELD * FIELD * 4);
+  let wX = null;
+  let wY = null;
+  let tmpRow = null;
+
+  function weights(n) {
+    const idx = new Int32Array(FIELD * 4);
+    const w = new Float32Array(FIELD * 4);
+    for (let k = 0; k < FIELD; k++) {
+      const t = (k / (FIELD - 1)) * n;
+      const i0 = Math.min(n - 1, Math.floor(t));
+      const f = t - i0;
+      const f2 = f * f;
+      const f3 = f2 * f;
+      w[k * 4] = -0.5 * f3 + f2 - 0.5 * f;
+      w[k * 4 + 1] = 1.5 * f3 - 2.5 * f2 + 1;
+      w[k * 4 + 2] = -1.5 * f3 + 2 * f2 + 0.5 * f;
+      w[k * 4 + 3] = 0.5 * f3 - 0.5 * f2;
+      for (let m = 0; m < 4; m++) idx[k * 4 + m] = Math.min(n, Math.max(0, i0 - 1 + m));
+    }
+    return { idx, w };
+  }
+
+  function resampleWeights() {
+    wX = weights(N);
+    wY = weights(M);
+    tmpRow = new Float32Array((M + 1) * FIELD * 2);
+  }
+
+  function field() {
+    const on = getParams().enabled;
+    if (on) {
+      // Lượt 1: nội suy theo X cho từng hàng nút.
+      for (let j = 0; j <= M; j++) {
+        const base = j * (N + 1);
+        for (let k = 0; k < FIELD; k++) {
+          let sx = 0;
+          let sy = 0;
+          for (let m = 0; m < 4; m++) {
+            const ww = wX.w[k * 4 + m];
+            const id = base + wX.idx[k * 4 + m];
+            sx += ww * qx[id];
+            sy += ww * qy[id];
+          }
+          const o = (j * FIELD + k) * 2;
+          tmpRow[o] = sx;
+          tmpRow[o + 1] = sy;
+        }
+      }
+      // Lượt 2: nội suy theo Y rồi nén.
+      let o = 0;
+      for (let l = 0; l < FIELD; l++) {
+        for (let k = 0; k < FIELD; k++) {
+          let sx = 0;
+          let sy = 0;
+          for (let m = 0; m < 4; m++) {
+            const ww = wY.w[l * 4 + m];
+            const id = (wY.idx[l * 4 + m] * FIELD + k) * 2;
+            sx += ww * tmpRow[id];
+            sy += ww * tmpRow[id + 1];
+          }
+          const nx = Math.max(0, Math.min(65535, Math.round(clamp01(sx) * 65535)));
+          const ny = Math.max(0, Math.min(65535, Math.round(clamp01(sy) * 65535)));
+          fieldData[o++] = nx >> 8;
+          fieldData[o++] = nx & 255;
+          fieldData[o++] = ny >> 8;
+          fieldData[o++] = ny & 255;
+        }
+      }
+    }
+    return { data: fieldData, size: FIELD, on };
+  }
+
+  // ---------- Đường lưới cho lớp "Hiện lưới" ----------
+  // Đường dọc thứ i là tập điểm màn hình có q.x = i/N → dò theo từng hàng nút.
+  // Kết quả là đường CONG, khác bản cũ (luôn thẳng).
   function lines() {
-    return { x: axes.x.p.slice(), y: axes.y.p.slice() };
+    const row = N + 1;
+    const out = { x: [], y: [] };
+    for (let i = 0; i <= N; i++) {
+      const T = i / N;
+      const poly = [];
+      for (let j = 0; j <= M; j++) {
+        const base = j * row;
+        for (let k = 0; k < N; k++) {
+          const a = qx[base + k];
+          const b = qx[base + k + 1];
+          if (T <= b || k === N - 1) {
+            poly.push({ x: (k + (T - a) / Math.max(b - a, 1e-5)) / N, y: j / M });
+            break;
+          }
+        }
+      }
+      out.x.push(poly);
+    }
+    for (let j = 0; j <= M; j++) {
+      const T = j / M;
+      const poly = [];
+      for (let i = 0; i <= N; i++) {
+        for (let k = 0; k < M; k++) {
+          const a = qy[k * row + i];
+          const b = qy[(k + 1) * row + i];
+          if (T <= b || k === M - 1) {
+            poly.push({ x: i / N, y: (k + (T - a) / Math.max(b - a, 1e-5)) / M });
+            break;
+          }
+        }
+      }
+      out.y.push(poly);
+    }
+    return out;
   }
 
-  return { update, uniforms, lines, grab, move, release, tap, isDragging: () => dragging, _axes: axes };
+  // ---------- Khởi tạo ----------
+  const P0 = getParams();
+  build(P0.cols, P0.rows);      // K đang là 0 nên lưới mở ra ở trạng thái PHẲNG
+
+  return {
+    update, field, lines, pointer, pointerOut,
+    _q: () => ({ qx, qy, N, M }),
+    _e: () => energy,
+  };
 };

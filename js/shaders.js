@@ -104,12 +104,13 @@ void main() {
 }`;
 
   // ---------------------------------------------------------------------------
-  // BƯỚC 1 — Chuyển động: camera shake → Elastic Grid (lưới hàng/cột đàn hồi) → rung nét → luma → Levels.
+  // BƯỚC 1 — Chuyển động: camera shake → Elastic Grid (tấm thạch 2D) → rung nét → luma → Levels.
   // Chỉ đổi CHỖ ĐỌC ảnh. Chạy trước bước tách viền nên nét, ASCII, MacPaint, texture đều bám theo lưới.
   //
-  // Elastic Grid: ảnh chia N cột × M hàng. JS (grid.js) tính vị trí từng đường lưới trên màn hình
-  // (uGX, uGY, từ 0 đến 1). Mỗi ô phóng to/thu nhỏ đều theo kích thước ô, hai trục độc lập,
-  // nên đường thẳng trong ô vẫn thẳng và không có chỗ nào bị xoắn.
+  // Elastic Grid: JS (grid.js) mô phỏng một tấm thạch 2D rồi gửi xuống BẢNG TRA uWarp:
+  // mỗi texel = "điểm màn hình này đọc ảnh gốc ở đâu" (toạ độ x, y, mỗi trục nén 16 bit
+  // vào 2 kênh màu). Vì là bảng 2D nên x mới phụ thuộc cả x lẫn y cũ → đường lưới cong,
+  // xoắn và trượt được, không còn bị khoá theo trục như bản tách trục cũ.
   // ---------------------------------------------------------------------------
   const motion = common + `
 uniform sampler2D uTex;       // ảnh bước 0
@@ -124,28 +125,33 @@ uniform float uRot;           // camera shake: góc xoay tối đa (radian)
 uniform float uZoom;          // phóng to quanh tâm (0.04 = 4%)
 uniform float uBlack;         // Levels: điểm đen
 uniform float uWhite;         // Levels: điểm trắng
-// Elastic Grid: vị trí đường lưới trên màn hình, 0..1. Trục Y tính từ TRÊN xuống (như màn hình).
-uniform float uGX[17];        // đường dọc thứ 0..uNX (0 = mép trái, uNX = mép phải)
-uniform float uGY[17];        // đường ngang thứ 0..uNY (0 = mép trên, uNY = mép dưới)
-uniform float uNX;            // số cột
-uniform float uNY;            // số hàng
+// Elastic Grid: bảng tra chỗ đọc ảnh, uWarpN × uWarpN texel. Trục Y tính từ TRÊN xuống.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+uniform highp sampler2D uWarp;   // cần highp: mỗi trục nén 16 bit vào 2 kênh 8 bit
+#else
+uniform mediump sampler2D uWarp;
+#endif
+uniform float uWarpN;         // số texel trên một cạnh bảng
+uniform float uWarpOn;        // 0 = tắt lớp lưới (đọc thẳng, không biến dạng)
 
-// Tra ngược trục X: điểm màn hình s nằm trong ô thứ i (giữa đường i và i+1)
-// → toạ độ ảnh gốc = (i + vị trí tương đối trong ô) / số ô.
-// WebGL1 không cho truyền mảng vào hàm, nên viết riêng invX và invY đọc thẳng uniform.
-float invX(float s) {
-  for (int i = 0; i < 16; i++) {
-    if (float(i) >= uNX) break;
-    if (s <= uGX[i + 1]) return (float(i) + (s - uGX[i]) / max(uGX[i + 1] - uGX[i], 1e-5)) / uNX;
-  }
-  return 1.0;
+// Giải nén một texel của bảng: R,G = byte cao/thấp của toạ độ X; B,A = của toạ độ Y.
+// Giá trị gốc = (hi*256 + lo) / 65535, mà hi = R*255 nên rút gọn thành (R*256 + G) / 257.
+vec2 warpTexel(vec2 c) {
+  vec4 t = texture2D(uWarp, c);
+  return vec2(t.r * 256.0 + t.g, t.b * 256.0 + t.a) / 257.0;
 }
-float invY(float s) {
-  for (int i = 0; i < 16; i++) {
-    if (float(i) >= uNY) break;
-    if (s <= uGY[i + 1]) return (float(i) + (s - uGY[i]) / max(uGY[i + 1] - uGY[i], 1e-5)) / uNY;
-  }
-  return 1.0;
+
+// Tra bảng bằng nội suy tuyến tính giữa 4 texel quanh điểm s (bảng đã được JS làm mượt
+// bằng Catmull-Rom nên tới đây nội suy thẳng là đủ, không thấy gãy).
+vec2 warpAt(vec2 s) {
+  vec2 t = s * (uWarpN - 1.0);
+  vec2 b = floor(t);
+  vec2 f = t - b;
+  vec2 c0 = (b + 0.5) / uWarpN;
+  vec2 c1 = (b + 1.5) / uWarpN;
+  vec2 top = mix(warpTexel(c0), warpTexel(vec2(c1.x, c0.y)), f.x);
+  vec2 bot = mix(warpTexel(vec2(c0.x, c1.y)), warpTexel(c1), f.x);
+  return mix(top, bot, f.y);
 }
 
 void main() {
@@ -159,11 +165,10 @@ void main() {
   float cs = cos(ang), sn = sin(ang);
   p = c + vec2(cs * d.x - sn * d.y, sn * d.x + cs * d.y) + off;
 
-  // 2. Elastic Grid: đổi sang toạ độ màn hình 0..1 (Y từ trên xuống), tra ngược từng trục.
-  float sx = clamp(p.x / uRes.x, 0.0, 1.0);
-  float sy = clamp(1.0 - p.y / uRes.y, 0.0, 1.0);
-  vec2 uv = vec2(invX(sx), 1.0 - invY(sy));        // đổi Y về lại kiểu vUv (từ dưới lên)
-  p = uv * uRes;
+  // 2. Elastic Grid: đổi sang toạ độ màn hình 0..1 (Y từ TRÊN xuống) rồi tra bảng thạch.
+  vec2 s = vec2(clamp(p.x / uRes.x, 0.0, 1.0), clamp(1.0 - p.y / uRes.y, 0.0, 1.0));
+  vec2 q = uWarpOn > 0.5 ? warpAt(s) : s;
+  p = vec2(q.x, 1.0 - q.y) * uRes;                 // đổi Y về lại kiểu vUv (từ dưới lên)
 
   // 3. Rung nét (tuỳ chọn, mặc định 0): dời điểm đọc theo 2 lớp nhiễu trôi theo thời gian.
   if (uAmp > 0.0) {

@@ -22,9 +22,9 @@ CL.exporter = (() => {
   function png(canvas, renderNoFilter, toast) {
     renderNoFilter();
     canvas.toBlob((blob) => {
-      if (!blob) return toast('Không tạo được PNG.', true);
+      if (!blob) return toast(CL.t('Không tạo được PNG.'), true);
       download(blob, `contour-lines-${stamp()}.png`);
-      toast('Đã lưu PNG.');
+      toast(CL.t('Đã lưu PNG.'));
     }, 'image/png');
   }
 
@@ -50,7 +50,7 @@ CL.exporter = (() => {
   function video({ canvas, seconds, onStart, onEnd, toast }) {
     const types = videoTypes();
     if (!types.length || !canvas.captureStream) {
-      toast('Trình duyệt này không hỗ trợ quay video từ canvas. Hãy thử Chrome, Edge, Firefox hoặc Safari bản mới.', true);
+      toast(CL.t('Trình duyệt này không hỗ trợ quay video từ canvas. Hãy thử Chrome, Edge, Firefox hoặc Safari bản mới.'), true);
       onEnd();
       return;
     }
@@ -63,7 +63,7 @@ CL.exporter = (() => {
         rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 12e6 });
       } catch (err) {
         if (i + 1 < types.length) return attempt(i + 1);
-        toast('Không khởi tạo được bộ quay video: ' + err.message, true);
+        toast(CL.t('Không khởi tạo được bộ quay video: %1', err.message), true);
         return onEnd();
       }
       const chunks = [];
@@ -73,13 +73,13 @@ CL.exporter = (() => {
         const blob = new Blob(chunks, { type: type.split(';')[0] });
         if (blob.size > 0) {
           download(blob, `contour-lines-${stamp()}.${type.includes('mp4') ? 'mp4' : 'webm'}`);
-          toast(`Đã lưu video (${(blob.size / 1e6).toFixed(1)} MB, ${type.split(';')[0]}).`);
+          toast(CL.t('Đã lưu video (%1 MB, %2).', (blob.size / 1e6).toFixed(1), type.split(';')[0]));
           onEnd();
         } else if (i + 1 < types.length) {
-          toast(`File ${type} bị rỗng, đang quay lại với ${types[i + 1]}…`, true);
+          toast(CL.t('File %1 bị rỗng, đang quay lại với %2…', type, types[i + 1]), true);
           attempt(i + 1);
         } else {
-          toast('Quay video thất bại: mọi định dạng đều cho file rỗng.', true);
+          toast(CL.t('Quay video thất bại: mọi định dạng đều cho file rỗng.'), true);
           onEnd();
         }
       };
@@ -106,8 +106,8 @@ CL.exporter = (() => {
   function readPreset(file) {
     return file.text().then((text) => {
       const data = JSON.parse(text);
-      if (!data || typeof data !== 'object' || !data.state) throw new Error('thiếu trường "state"');
-      if (data.app && data.app !== APP) throw new Error(`file của ứng dụng khác ("${data.app}")`);
+      if (!data || typeof data !== 'object' || !data.state) throw new Error(CL.t('thiếu trường "state"'));
+      if (data.app && data.app !== APP) throw new Error(CL.t('file của ứng dụng khác ("%1")', data.app));
       return CL.presets.sanitize(data.state);
     });
   }

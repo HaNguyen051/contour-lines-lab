@@ -33,8 +33,10 @@
     <button class="btn" id="btnSavePreset">Lưu preset</button>
     <label class="btn">Mở preset<input type="file" id="filePreset" accept=".json,application/json" hidden></label>
     <span class="grow"></span>
+    <label class="field-inline" title="Khung hình: cắt cân từ giữa ảnh, phủ kín khung">Khung <select id="ratioSelect"></select></label>
     <label class="field-inline" title="Độ phân giải xử lý (cạnh dài)">Xử lý <select id="resSelect"></select></label>
     <label class="field-inline"><input type="checkbox" id="chkDesc" checked> Chú thích</label>
+    <span class="langsw"><button class="btn btn-lang" data-lang="vi">VI</button><button class="btn btn-lang" data-lang="en">EN</button></span>
     <button class="btn btn-mode" title="Chế độ xem (H)">✕ Chế độ xem</button>
   </header>
 
@@ -58,13 +60,16 @@
     <label class="btn">Tải ảnh<input type="file" class="file-image" accept="image/*" hidden></label>
     <button class="btn btn-play" title="Tạm dừng (Space)">⏸</button>
     <button class="btn btn-png">Lưu PNG</button>
+    <span class="langsw"><button class="btn btn-lang" data-lang="vi">VI</button><button class="btn btn-lang" data-lang="en">EN</button></span>
     <button class="btn primary btn-mode" title="Tuỳ chỉnh (H)">⚙ Tuỳ chỉnh</button>
   </nav>
-  <p class="viewer-hint">Kéo ảnh: hàng và cột co giãn theo tay · chạm nhanh: phía đó to ra · G hiện lưới · Ctrl+V dán ảnh · H mở tuỳ chỉnh</p>
+  <p class="viewer-hint">Rê chuột qua ảnh (không cần bấm): ảnh bị hút về phía con trỏ · ngừng rê: ảnh về phẳng · G hiện lưới · Ctrl+V dán ảnh · H mở tuỳ chỉnh</p>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <!-- Script thường (không phải module) để nhấp đúp index.html vẫn chạy. Thứ tự nạp quan trọng. -->
+  <!-- i18n.js phải nạp trước mọi file dùng CL.t() -->
+  <script src="js/i18n.js"></script>
   <script src="js/gl.js"></script>
   <script src="js/shaders.js"></script>
   <script src="js/textures.js"></script>
@@ -74,6 +79,8 @@
   <script src="js/grid.js"></script>
   <script src="js/interact.js"></script>
   <script src="js/export.js"></script>
+  <!-- Ảnh mở sẵn, nhúng dạng data URI (sinh bằng make-sample.py). Phải đứng trước main.js. -->
+  <script src="js/sample-image.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

@@ -81,7 +81,7 @@ Thu phóng ảnh về độ phân giải xử lý. Ảnh PNG có nền trong su�
 Bước này **không đổi màu, chỉ đổi chỗ đọc ảnh**. Pixel ở `p` lấy màu tại một điểm `p'` hơi lệch:
 
 1. **Camera shake:** mỗi khung bốc ngẫu nhiên một góc xoay và một độ dịch, cộng phóng to nhẹ để khỏi lộ mép.
-2. **Elastic Grid:** ảnh chia lưới hàng/cột; mỗi cột, mỗi hàng to nhỏ riêng, nội dung trong ô co giãn đều theo ô (xem mục 4). Còn "Rung nét" (nhiễu trôi, mặc định 0) là phần Elastic kiểu cũ, để lại làm tuỳ chọn.
+2. **Elastic Grid:** ảnh chia lưới hàng/cột; mỗi cột, mỗi hàng to nhỏ riêng, và các ô kéo theo nhau như một tấm thạch nên biến dạng lan ra, đường lưới cong được (xem mục 4). Còn "Rung nét" (nhiễu trôi, mặc định 0) là phần Elastic kiểu cũ, để lại làm tuỳ chọn.
 3. Đọc ảnh tại `p'`, đổi sang xám bằng `luma = 0.299R + 0.587G + 0.114B`, rồi áp **Levels** để kéo giãn tương phản.
 
 Vì biến dạng xảy ra **trước** khi tách nét, mỗi khung (ảnh rung, lưới dịch) ra một bộ nét hơi khác. Dân hoạt hình gọi hiện tượng này là *line boil*.
@@ -131,47 +131,83 @@ Canvas luôn có kích thước thật bằng độ phân giải xử lý; CSS c
 
 ## 4. Chuyển động và tương tác chuột
 
+> Từ bản này, **chuột là nguồn chuyển động duy nhất của Elastic Grid**. Không đụng chuột thì ảnh đứng phẳng.
+
 **Frame drop** (`main.js`, hàm `currentStep`):
 
 ```js
-step = Math.floor(time * fps);          // 8 fps → step đổi 8 lần mỗi giây
+step = Math.floor(time * fps);          // 7 fps → step đổi 7 lần mỗi giây
 if (loop > 0) step %= loop * fps;       // vòng lặp: số khung quay về 0
 ```
 
-Mọi giá trị ngẫu nhiên (độ rung, nhiễu nét, ô ASCII, cỡ khối) đều tính từ `step`, nên giữa hai lần đổi, hình đứng yên. Trang **chỉ chạy lại pipeline khi `step` đổi** hoặc khi tham số đổi. Ở 8 fps, GPU chỉ làm việc 8 lần mỗi giây.
+Mọi giá trị ngẫu nhiên (độ rung, nhiễu nét, ô ASCII, cỡ khối) đều tính từ `step`, nên giữa hai lần đổi, hình đứng yên. Trang **chỉ chạy lại pipeline khi `step` đổi** hoặc khi tham số đổi. Ở 7 fps, GPU chỉ làm việc 7 lần mỗi giây.
 
-### Elastic Grid: lưới hàng/cột đàn hồi (`grid.js` + đầu shader `motion`)
+Mặc định 7 là số đo từ video mẫu, không phải ước lượng: tách 150 khung của video ở 30 fps rồi đếm số khung thật sự đổi hình được 34 lần đổi trong 5 giây = 6,97 hình/giây. Riêng slide chỉ có Elastic Grid (không có Frame drop) thì cứ 5 khung mới có 1 khung trùng — dấu hiệu nội dung 24 fps chạy liên tục.
 
-Chuyển động trong video mẫu **không phải** ảnh bị uốn như chất lỏng. Ảnh được chia thành lưới ô, mỗi cột có bề rộng riêng, mỗi hàng có chiều cao riêng, và nội dung trong mỗi ô phóng to/thu nhỏ đều theo ô. Vì hai trục độc lập (x hiển thị chỉ phụ thuộc x gốc), đường thẳng trong ô vẫn thẳng.
+### Elastic Grid: tấm thạch 2D (`grid.js` + đầu shader `motion`)
 
-**1. Vòm sin.** Trên một trục (0 → 1), đường lưới thứ i có vị trí nghỉ `r_i = i/N`. Vị trí đích của nó:
+Ảnh được chia lưới ô: mỗi cột có bề rộng riêng, mỗi hàng có chiều cao riêng, hàng và cột to nhỏ luân phiên theo nhịp như video. Nhưng khác bản đầu — nơi hai trục hoàn toàn độc lập nên đường lưới luôn thẳng đứng hoặc nằm ngang — bản này mô phỏng **một tấm thạch**: các ô kéo theo nhau, nên đường lưới cong được, xoắn được, và một cú kéo ở giữa khung lan ra xung quanh rồi dội về.
 
-```
-T_i = r_i + A · w(r_i; c)
-w(u; c) = sin(π/2 · u/c)              nếu u ≤ c
-        = sin(π/2 · (1 − u)/(1 − c))  nếu u > c
-```
+**1. Lưới nút.** Nút thứ (i, j) nằm CỐ ĐỊNH trên màn hình tại `s = (i/N, j/M)` (y tính từ trên xuống). Giá trị lưu tại nút là `q` — **chỗ đọc ảnh gốc** cho điểm màn hình đó. Nghỉ thì `q = s`; biến dạng là `q` lệch khỏi `s`. Nhờ lưu sẵn chiều "màn hình → ảnh gốc", shader chỉ việc tra bảng, không phải giải ngược gì.
 
-`w` bằng 0 ở hai mép và bằng 1 tại `c`, nên mép đứng yên còn đường ở `c` dịch nhiều nhất. Với `A > 0`, các đường trước `c` bị đẩy dãn ra (ô to), sau `c` bị dồn lại (ô nhỏ). Độ dốc của `A·w` ở mép là `A·π/(2c)`. Với A = 0.15, c = 0.4 thì dốc 0.59, nên ô ở mép to 1.59 lần. Đó là lý do video có ô to nhất khoảng 1.7× và nhỏ nhất khoảng 0.6×.
-
-**2. Tra ngược trong shader.** Shader hỏi: "pixel ở vị trí s trên màn hình thuộc ô nào?". Nó dò tới ô i có `p_i ≤ s ≤ p_(i+1)`, rồi trả về toạ độ ảnh gốc `(i + vị trí tương đối trong ô) / N`. Làm riêng cho X (`invX`) và Y (`invY`). Vì WebGL1 không cho truyền mảng vào hàm, mỗi hàm đọc thẳng uniform mảng `uGX[17]` / `uGY[17]`.
-
-**3. Lò xo.** Mỗi đường là một lò xo tắt dần, bước cố định 1/120 giây:
+**2. Đích: bướu lẻ đặt tại con trỏ.** Trên một trục (0 → 1), đường lưới thứ i có vị trí nghỉ `r_i = i/N` và vị trí đích:
 
 ```
-a = ω²·(T − p) − 2·ζ·ω·v     (ω = 2π·tần số)
-v += a·dt;  p += v·dt
+T_i = r_i + K · bump((r_i − u) / sg) · sin(π · r_i)
+bump(t) = t · e^(0.5 − t²/2)
 ```
 
-Với ζ = 0.73, đường vượt đích khoảng 3% rồi dội lại và đứng yên sau khoảng 1 giây. Sau mỗi bước, hai lượt quét giữ cho các đường không đè lên nhau (mỗi ô rộng ít nhất 0.3 cỡ gốc).
+`u` là chỗ con trỏ trên trục đó, `K = Độ co giãn × năng lượng` (mang dấu âm khi *Chuột hút vào* bật), `sg` là *Vùng ảnh hưởng*.
 
-**4. Độ trễ = làn sóng.** Mỗi trục lưu lại đích của 3 giây gần nhất. Đường i không nhìn đích hiện tại mà nhìn đích của `d_i` giây trước. Đặt `d_i = sweep × (1 − r_i)` thì các đường ở mép cuối chạy trước, mép đầu chạy sau, thành một làn sóng quét qua khung trong `sweep` giây.
+`bump` là hàm **lẻ**: bằng 0 tại `t = 0`, đạt ±1 tại `t = ±1`, rồi tắt rất nhanh. Vì `bump(0) = 0`, đường lưới ngay dưới con trỏ **đứng yên** — nó là mỏ neo. Hai bên mỏ neo mang dấu ngược nhau nên cùng bị kéo về phía con trỏ: đó là cảm giác "hút". Thừa số `sin(π·r_i)` là cửa sổ giữ hai mép khung đứng yên kể cả khi con trỏ sát mép, nên viền ảnh không bao giờ hở.
 
-**5. Tự chạy.** Mỗi nhịp đổi một trục giữa hai trạng thái S+ (A = +0.15, c ≈ 0.33–0.45) và S− (A = −0.15, c ≈ 0.60–0.66), luân phiên Y rồi X. Một phần tư số nhịp là nhịp chậm (lò xo 0.45 Hz, lan 1.4 giây).
+Hệ quả của việc tắt nhanh: quá khoảng `3 × sg` tính từ con trỏ thì gần như không còn biến dạng, nên *Vùng ảnh hưởng* nhỏ cho ra một chỗ bóp cục bộ, lớn cho ra cả ảnh cùng dồn về con trỏ.
 
-**6. Kéo.** Lúc nhấn, tra ngược để biết điểm ảnh gốc `c` đang nằm dưới ngón tay. Khi kéo, thêm một vòm thứ hai có tâm đúng tại `c`, biên độ = quãng tay đã đi. Vì `w(c; c) = 1`, điểm đó đi đúng theo ngón tay. Độ trễ tính từ `c` (`d_i = sweep × |r_i − c|`), nên chỗ gần tay phản ứng trước. Biên độ đi qua `L·tanh(A/L)`: kéo nhẹ thì gần như theo tay, kéo xa thì bị ghì lại mềm.
+Tra ngược dãy `T_i` ra được đích của từng nút.
 
-**7. Vẽ lại.** Lưới được vẽ theo Frame drop (8 hình/giây) như video. Riêng lúc đang kéo, hoặc vừa thả mà lưới chưa yên, nếu *Mượt khi tương tác* bật thì vẽ mỗi khung (~60 hình/giây) để tay thấy mượt.
+**3. Vật lý tấm thạch.** Đặt `e = q − đích`. Mỗi nút chạy theo:
+
+```
+e'' = −ω₀²·e  +  c²·∇²e  −  2ζω₀·e'  +  β·c²·∇²e'
+      ───┬──     ──┬──      ───┬──      ────┬────
+   lò xo về đích  kéo theo   tắt dần    nhớt: dập gợn li ti,
+                 hàng xóm               chỉ giữ sóng to
+```
+
+`∇²` là hiệu giữa nút đó và 4 hàng xóm. Số hạng `c²·∇²e` chính là thứ bản cũ không có: nó biến lưới thành môi trường truyền sóng, nên biến dạng **lan** ra thay vì mỗi hàng chạy riêng. `c` = thanh **Độ dẻo** (số lần sóng chạy hết khung trong 1 giây). Đặt Độ dẻo = 0 thì các nút rời nhau và hiệu ứng quay đúng về kiểu tách trục cũ. Bước thời gian cố định 1/120 giây; hệ số `c²` và `β` đều có trần tự động để mô phỏng không bao giờ vỡ.
+
+**4. Mép khung.** Bốn góc ghim chặt; nút trên cạnh chỉ trượt **dọc theo** cạnh (nút cạnh trái giữ x = 0 nhưng y chạy tự do). Nhờ vậy viền ảnh không bao giờ hở ra ngoài, mà bên trong vẫn chảy. Sau mỗi bước còn một lượt quét giữ `q` tăng dần theo từng hàng và từng cột, để ảnh không bị lộn ngược.
+
+**5. Con trỏ điều khiển biến dạng.** Đây là nguồn chuyển động **duy nhất**; nhịp tự chạy theo đồng hồ (`beat()`) đã bị gỡ hẳn, cùng với toàn bộ nhánh kéo tay (`grab`/`move`/`release`/`applyDrag`) và vệt rê đàn hồi (`stepHover`). Mỗi khung hình, `stepCursor()` làm ba việc:
+
+1. **Nạp năng lượng.** `energy += (quãng con trỏ vừa đi) x sens`, kẹp tại 1. Quãng đo bằng `dist()` nên đã nhân tỉ lệ cao/rộng, ảnh dọc không bị méo.
+2. **Cho tiêu.** `energy *= exp(-dt / hold)`. Đây là lý do ngừng rê — kể cả khi con trỏ vẫn nằm trong khung — thì ảnh vẫn về phẳng: không có gì nạp thêm thì năng lượng cứ tiêu.
+3. **Dựng đích.** `axis.u` = chỗ con trỏ trên trục đó, `axis.K = amp x energy` (âm khi hút), `axis.sg` = *Vùng ảnh hưởng*; trục dọc chia `sg` cho tỉ lệ cao/rộng để vùng ảnh hưởng tròn trên màn hình.
+
+**Vì sao không dùng vòm sin nữa.** Vòm sin `arch(r, c)` trải suốt cả trục và bằng 0 ở hai mép, nên chỉ đổi được ĐỈNH nằm đâu; muốn con trỏ ở nửa nào thì nửa đó phản ứng, buộc phải **lật dấu biên độ** khi con trỏ qua đường giữa, còn tâm `c` thì kẹt trong [0.33, 0.67] và bão hoà ở hai đầu. Hệ quả: mỗi trục chỉ có 2 trạng thái thật, hai trục ghép lại thành **4 góc**, và biến dạng nhảy khi con trỏ băng qua giữa khung.
+
+Thay bằng một bướu **lẻ** đặt đúng chỗ con trỏ:
+
+```
+p(r) = r + K · bump((r − u) / sg) · sin(π r)
+bump(t) = t · e^(0.5 − t²/2)        (lẻ, đỉnh ±1 tại t = ±1, tắt nhanh)
+```
+
+`bump(0) = 0` nên điểm ngay dưới con trỏ là mỏ neo đứng yên; hai bên lệch dấu nhau nên cùng bị kéo về phía con trỏ (`K < 0` = hút). Thừa số `sin(π r)` giữ hai mép khung đứng yên kể cả khi con trỏ sát mép. Không còn chỗ nào phải lật dấu, nên tâm biến dạng đi liên tục theo con trỏ.
+
+Đo được (lưới 16x16, nạp năng lượng bằng nhau): quét con trỏ từ x = 0.15 đến 0.85, tâm biến dạng bám con trỏ trong sai số **±0.013**, tại đúng x = 0.50 đọc được 0.500, và bước nhảy lớn nhất của tâm giữa hai vị trí con trỏ cách nhau 0.05 là **0.055** — tức liên tục.
+
+Vì `energy = 0` cho `A = 0`, `forward()` trả về `fwd[i] = i/n`, tức lưới đều — đích chính là ảnh phẳng. Không cần nhánh riêng nào để "tắt" hiệu ứng.
+
+Điểm cốt lõi: con trỏ **không dời thẳng ảnh**, nó chỉ dời **đích**. Lò xo mới là thứ đưa lưới tới đó, nên chuyển động luôn mượt và tới sau con trỏ một nhịp; còn số hạng `c²∇²e` chở biến dạng lan ra ngoài nên nút xa con trỏ tới muộn hơn nữa. Đo được: với *Độ dẻo* 0,55, nút cách con trỏ nửa khung đạt đỉnh sau nút tại con trỏ khoảng 200 ms; đặt *Độ dẻo* = 0 thì độ trễ đó biến mất.
+
+**6. Nhận chuột.** `interact.js` chỉ ghi lại chỗ con trỏ, không tính gì. Nó nghe `pointermove` trên `window` (không phải trên canvas) để con trỏ đi sát mép hay lướt qua thanh công cụ vẫn còn tác dụng, và nhớ lại `getBoundingClientRect()` vì `pointermove` bắn rất dày. Ra ngoài khung quá 0,15 phần thì gọi `pointerOut()`.
+
+Cách này chép đúng hợp đồng chuột của effect.app, đọc được từ bundle `core` của họ: nghe `mousemove` trên `document`, lấy `clientX/clientY` **thô** — không làm mượt, không quán tính ở tầng JS — rồi mỗi khung vẽ đưa vào shader hai vector `iMouse.xy` (khung này) và `iMouse.zw` (khung trước). Độ trễ sinh ra từ vật lý, không từ bộ lọc đầu vào.
+
+**7. Bảng tra gửi cho shader.** Lưới nút thưa (tối đa 17×17) được nội suy **Catmull-Rom** lên bảng 65×65 — mượt tới đạo hàm bậc hai nên không thấy gãy tại nút — rồi nén vào một texture RGBA8: `R,G` = byte cao/thấp của toạ độ X, `B,A` = của toạ độ Y (16 bit mỗi trục, sai số dưới 0.1 px). Shader lấy 4 texel quanh điểm cần đọc, giải nén rồi nội suy tuyến tính (`warpAt`). Vì là bảng **hai chiều**, x mới phụ thuộc cả x lẫn y cũ — đó là khác biệt gốc rễ so với `invX`/`invY` cũ.
+
+**7. Vẽ lại.** Lưới được vẽ theo Frame drop (7 hình/giây) như video. Riêng lúc đang rê chuột, hoặc vừa ngừng mà lưới chưa yên, nếu *Mượt khi tương tác* bật thì vẽ mỗi khung (~60 hình/giây) cho mượt tay.
 
 **8. MacPaint theo vòng 6 giây.** Cỡ ô MacPaint trong video to nhỏ theo một nhịp đo được (9 → 45 px, lặp mỗi 6 giây). `pipeline.js` nội suy smoothstep giữa các mốc đó (hàm `videoBitmap`).
 
@@ -210,7 +246,7 @@ Cách học tốt nhất là tự viết lại. Mỗi mốc dưới đây **ch�
 | I | Atlas ký tự + ASCII | Ký tự theo nét | `glyphAtlas()`, shader `ascii` |
 | J | Hoa văn + MacPaint + bản đồ mật độ | Khối xám bậc thang | `patternAtlas()`, shader `macpaint` |
 | K | Texture, nền tối | Giống bản photocopy | shader `texture` |
-| L | Elastic Grid: vòm sin + lò xo + độ trễ, rồi kéo/chạm | Hàng, cột to nhỏ như video; kéo thì co giãn theo tay | `grid.js`, `interact.js`, đầu shader `motion` |
+| L | Elastic Grid: bướu lẻ tại con trỏ đặt đích + lưới nút 2D nối lò xo | Vùng quanh con trỏ dồn về phía con trỏ, sóng lan ra rồi dội về; không đụng chuột thì phẳng | `grid.js`, `interact.js`, đầu shader `motion` |
 | M | Xuất PNG, video, preset | Có file | `export.js` |
 | N | Schema tự sinh giao diện | Thêm 1 dòng ra 1 thanh trượt | `presets.js`, `ui.js` |
 
