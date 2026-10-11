@@ -321,13 +321,40 @@
     ui.toast(CL.t('Ảnh mẫu #%1', sampleSeed));
   };
 
+  // Nút tròn (.ib) ở chế độ xem: chỉ có icon, nhãn nằm trong .tip và hiện khi rê chuột.
+  const ICON = {
+    pause: '<svg class="ic solid" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>',
+    play: '<svg class="ic solid" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>',
+    fsOn: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
+    fsOff: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>',
+  };
+  const tip = (s) => '<span class="tip">' + s + '</span>';
+
   function setPlaying(p) {
     settings.playing = p;
     $$('.btn-play').forEach((b) => {
-      b.textContent = p ? '⏸' : '▶';
-      b.title = p ? CL.t('Tạm dừng (Space)') : CL.t('Chạy (Space)');
+      if (b.classList.contains('ib')) {
+        b.innerHTML = (p ? ICON.pause : ICON.play) + tip(CL.t(p ? 'Tạm dừng' : 'Chạy'));
+      } else {
+        b.textContent = p ? '⏸' : '▶';
+        b.title = p ? CL.t('Tạm dừng (Space)') : CL.t('Chạy (Space)');
+      }
     });
   }
+
+  // Toàn màn hình. iPhone không hỗ trợ Fullscreen API cho trang web nên nút bị ẩn ở đó.
+  function updateFullscreen() {
+    const on = !!document.fullscreenElement;
+    $$('.btn-fs').forEach((b) => {
+      b.hidden = !document.fullscreenEnabled;
+      b.innerHTML = (on ? ICON.fsOff : ICON.fsOn) + tip(CL.t(on ? 'Thoát toàn màn hình' : 'Toàn màn hình'));
+    });
+  }
+  $$('.btn-fs').forEach((b) => (b.onclick = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  }));
+  document.addEventListener('fullscreenchange', updateFullscreen);
   $$('.btn-play').forEach((b) => (b.onclick = () => setPlaying(!settings.playing)));
 
   $$('.btn-png').forEach((b) => (b.onclick = () => {
@@ -561,6 +588,7 @@
     fillResSelect();
     fillRatioSelect();
     setPlaying(settings.playing); // cập nhật tooltip nút chạy/dừng
+    updateFullscreen();
     $$('.btn-lang').forEach((b) => b.classList.toggle('primary', b.dataset.lang === CL.lang));
     dirty = true;
   }

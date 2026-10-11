@@ -25,10 +25,10 @@
         });
     }
   </script>
-  <!-- Font Be Vietnam Pro (cần mạng). Mất mạng thì tự dùng font hệ thống, app vẫn chạy. -->
+  <!-- Font Fragment Mono (chữ chính) + Be Vietnam Pro (cần mạng). Mất mạng thì tự dùng font hệ thống, app vẫn chạy. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Fragment+Mono&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <!-- class "viewer" = chế độ xem: chỉ có ảnh + tương tác. Phím H hoặc nút ⚙ để mở bảng tuỳ chỉnh. -->
@@ -93,12 +93,13 @@
     </aside>
   </main>
 
-  <!-- Thanh nút nổi ở chế độ xem. Nút VI/EN và Tuỳ chỉnh đã bỏ; thanh 7 bước (#stagebar) nổi ngay phía trên. -->
-  <!-- Mỗi nút: icon (SVG vẽ sẵn, không cần tải gì) + chữ. Trên điện thoại icon nằm trên, chữ nằm dưới. -->
+  <!-- Chế độ xem: các bước 0–6 nằm cột trái (#stagebar), nút tròn chỉ có icon nằm cột phải.
+       Rê chuột vào nút tròn thì nhãn (.tip) hiện ra. Nút chạy/dừng và toàn màn hình do main.js vẽ icon. -->
   <nav class="viewer-bar">
-    <label class="btn vb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg><span>Tải ảnh</span><input type="file" class="file-image" accept="image/*" hidden></label>
-    <button class="btn vb btn-play" title="Tạm dừng (Space)">⏸</button>
-    <button class="btn vb btn-png"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>Lưu PNG</span></button>
+    <button class="ib btn-play"></button>
+    <button class="ib btn-png"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg><span class="tip">Lưu PNG</span></button>
+    <label class="ib" tabindex="0"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg><span class="tip">Tải ảnh</span><input type="file" class="file-image" accept="image/*" hidden></label>
+    <button class="ib btn-fs"></button>
   </nav>
   <p class="viewer-hint hint-mouse">Rê chuột qua ảnh (không cần bấm): ảnh bị hút về phía con trỏ · ngừng rê: ảnh về phẳng · G hiện lưới · Ctrl+V dán ảnh · phím 0–6 đổi bước</p>
   <p class="viewer-hint hint-touch">Vuốt ngón tay trên ảnh: ảnh co giãn theo tay · nhấc tay: ảnh từ từ về phẳng</p>

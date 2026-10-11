@@ -219,6 +219,10 @@ CL.EN = {
   "Vuốt ngón tay trên ảnh: ảnh co giãn theo tay · nhấc tay: ảnh từ từ về phẳng": "Swipe a finger over the image: it stretches with your finger · lift it: the image slowly flattens back",
   "Kéo xuống để đóng": "Drag down to close",
   "Xong": "Done",
+  "Tạm dừng": "Pause",
+  "Chạy": "Play",
+  "Toàn màn hình": "Fullscreen",
+  "Thoát toàn màn hình": "Exit fullscreen",
   "Chọn \"Lưu hình ảnh\" để cất vào app Ảnh.": "Choose \"Save Image\" to put it in Photos.",
 };
 
