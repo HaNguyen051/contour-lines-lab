@@ -242,7 +242,7 @@ body.hide-desc .desc, body.hide-desc .layer-desc { display: none; }
 body.viewer .topbar, body.viewer .sheet { display: none; }
 body.viewer .layout { grid-template-columns: 1fr; }
 /* Chừa chỗ hai bên cho cột bước (trái) và cột nút tròn (phải) để không che ảnh */
-body.viewer .viewport { padding: 24px 190px; }   /* hai bên bằng nhau để ảnh nằm chính giữa */
+body.viewer .viewport { padding: 0 190px; }   /* ảnh chạm sát trên dưới; hai bên bằng nhau để ảnh nằm chính giữa */
 
 /* Cột trái: các bước 0–6. Bước đang xem rõ hẳn, các bước khác mờ đi. */
 body.viewer .stagebar {
