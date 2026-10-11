@@ -242,12 +242,12 @@ body.hide-desc .desc, body.hide-desc .layer-desc { display: none; }
 body.viewer .topbar, body.viewer .sheet { display: none; }
 body.viewer .layout { grid-template-columns: 1fr; }
 /* Chừa chỗ hai bên cho cột bước (trái) và cột nút tròn (phải) để không che ảnh */
-body.viewer .viewport { padding: 24px 96px 24px 190px; }
+body.viewer .viewport { padding: 24px 190px; }   /* hai bên bằng nhau để ảnh nằm chính giữa */
 
 /* Cột trái: các bước 0–6. Bước đang xem rõ hẳn, các bước khác mờ đi. */
 body.viewer .stagebar {
   position: fixed;
-  left: 38px;
+  left: 36px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 5;
@@ -273,13 +273,15 @@ body.viewer .stage-btn {
   transition: opacity .2s;
 }
 body.viewer .stage-btn b { display: none; }   /* bỏ số thứ tự, chỉ giữ tên bước */
+/* Ẩn bước 0 (Ảnh gốc) và 1 (Chuyển động) ở chế độ xem; phím 0, 1 vẫn dùng được */
+body.viewer .stage-btn:nth-child(-n+2) { display: none; }
 body.viewer .stage-btn:hover { opacity: .7; }
 body.viewer .stage-btn.active { background: #3a3c3b; opacity: 1; }
 
 /* Cột phải: nút tròn chỉ có icon, rê chuột thì nhãn trượt ra bên trái */
 body.viewer .viewer-bar {
   position: fixed;
-  right: 34px;
+  right: 36px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 5;
@@ -450,6 +452,7 @@ body.viewer .viewer-hint {
     bottom: calc(72px + env(safe-area-inset-bottom));
     transform: none;
     flex-direction: row;
+    justify-content: safe center;
     gap: 6px;
     overflow-x: auto;
     scrollbar-width: none;
