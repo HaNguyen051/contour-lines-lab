@@ -163,7 +163,7 @@ CL.EN = {
   "Tải ảnh": "Load image",
   "⚙ Tuỳ chỉnh": "⚙ Settings",
   "Tuỳ chỉnh": "Settings",
-  "Rê chuột qua ảnh (không cần bấm): ảnh bị hút về phía con trỏ · ngừng rê: ảnh về phẳng · G hiện lưới · Ctrl+V dán ảnh · H mở tuỳ chỉnh": "Move the mouse over the image (no clicking): the image is pulled towards the cursor · stop moving: it flattens · G shows the grid · Ctrl+V pastes an image · H opens settings",
+  "Rê chuột qua ảnh (không cần bấm): ảnh bị hút về phía con trỏ · ngừng rê: ảnh về phẳng · G hiện lưới · Ctrl+V dán ảnh · phím 0–6 đổi bước": "Move the mouse over the image (no clicking): the image is pulled towards the cursor · stop moving: it flattens · G shows the grid · Ctrl+V pastes an image · keys 0–6 switch steps",
   "Độ dài video": "Video length",
   "Độ phân giải xử lý (cạnh dài)": "Processing resolution (long edge)",
   "Chế độ xem (H)": "Viewer mode (H)",

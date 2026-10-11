@@ -236,7 +236,27 @@ body.hide-desc .desc, body.hide-desc .layer-desc { display: none; }
 
 /* ---------- Chế độ xem: chỉ có ảnh ---------- */
 .viewer-bar, .viewer-hint { display: none; }
-body.viewer .topbar, body.viewer .sheet, body.viewer .stagebar { display: none; }
+body.viewer .topbar, body.viewer .sheet { display: none; }
+/* Thanh 7 bước nổi ngay trên thanh nút: chọn xem ảnh dừng ở bước 0 → 6 */
+body.viewer .stagebar {
+  position: fixed;
+  left: 50%;
+  bottom: 74px;
+  transform: translateX(-50%);
+  z-index: 5;
+  flex-wrap: nowrap;
+  max-width: calc(100% - 32px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 6px;
+  border: 1px solid #45453f;
+  border-radius: 10px;
+  background: rgba(30, 30, 28, .85);
+  backdrop-filter: blur(8px);
+}
+body.viewer .stagebar::-webkit-scrollbar { display: none; }
+body.viewer .stage-btn { flex: none; white-space: nowrap; }
+body.viewer .toast { bottom: 128px; }
 body.viewer .layout { grid-template-columns: 1fr; }
 body.viewer .viewer-bar {
   position: fixed;
@@ -351,7 +371,7 @@ body.viewer .viewer-hint {
   /* Chừa chỗ cho tai thỏ ở trên và cho thanh nút + vạch Home ở dưới, để nút không che ảnh. */
   body.viewer .viewport {
     padding: env(safe-area-inset-top) env(safe-area-inset-right)
-             calc(80px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+             calc(136px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
   }
   body.viewer .viewer-bar {
     left: calc(10px + env(safe-area-inset-left));
@@ -386,6 +406,18 @@ body.viewer .viewer-hint {
     text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
   }
   .toast { bottom: calc(88px + env(safe-area-inset-bottom)); font-size: 14px; }
+  body.viewer .toast { bottom: calc(144px + env(safe-area-inset-bottom)); }
+  /* Thanh 7 bước: một hàng vuốt ngang, nằm trên thanh nút */
+  body.viewer .stagebar {
+    left: calc(10px + env(safe-area-inset-left));
+    right: calc(10px + env(safe-area-inset-right));
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    max-width: 440px;
+    margin: 0 auto;
+    transform: none;
+    padding: 6px;
+    border-radius: 18px;
+  }
 
   /* ---------- Chế độ tuỳ chỉnh: ảnh nửa trên, bảng trượt nửa dưới ---------- */
   body:not(.viewer) .viewport {
@@ -488,7 +520,8 @@ body.viewer .viewer-hint {
 
   /* ---------- Xoay ngang: ảnh bên trái, bảng bên phải ---------- */
   @media (orientation: landscape) and (max-height: 520px) {
-    body.viewer .viewport { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+    body.viewer .viewport { padding-bottom: calc(118px + env(safe-area-inset-bottom)); }
+    body.viewer .stagebar { bottom: calc(68px + env(safe-area-inset-bottom)); }
     body.viewer .viewer-bar .vb { min-height: 48px; }
     body:not(.viewer) .layout { flex-direction: row; }
     body:not(.viewer) .viewport {

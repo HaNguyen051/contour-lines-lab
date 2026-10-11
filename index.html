@@ -93,16 +93,14 @@
     </aside>
   </main>
 
-  <!-- Thanh nút nổi ở chế độ xem -->
+  <!-- Thanh nút nổi ở chế độ xem. Nút VI/EN và Tuỳ chỉnh đã bỏ; thanh 7 bước (#stagebar) nổi ngay phía trên. -->
   <!-- Mỗi nút: icon (SVG vẽ sẵn, không cần tải gì) + chữ. Trên điện thoại icon nằm trên, chữ nằm dưới. -->
   <nav class="viewer-bar">
     <label class="btn vb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg><span>Tải ảnh</span><input type="file" class="file-image" accept="image/*" hidden></label>
     <button class="btn vb btn-play" title="Tạm dừng (Space)">⏸</button>
     <button class="btn vb btn-png"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>Lưu PNG</span></button>
-    <span class="langsw"><button class="btn btn-lang" data-lang="vi">VI</button><button class="btn btn-lang" data-lang="en">EN</button></span>
-    <button class="btn vb primary btn-mode" title="Tuỳ chỉnh (H)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>Tuỳ chỉnh</span></button>
   </nav>
-  <p class="viewer-hint hint-mouse">Rê chuột qua ảnh (không cần bấm): ảnh bị hút về phía con trỏ · ngừng rê: ảnh về phẳng · G hiện lưới · Ctrl+V dán ảnh · H mở tuỳ chỉnh</p>
+  <p class="viewer-hint hint-mouse">Rê chuột qua ảnh (không cần bấm): ảnh bị hút về phía con trỏ · ngừng rê: ảnh về phẳng · G hiện lưới · Ctrl+V dán ảnh · phím 0–6 đổi bước</p>
   <p class="viewer-hint hint-touch">Vuốt ngón tay trên ảnh: ảnh co giãn theo tay · nhấc tay: ảnh từ từ về phẳng</p>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
