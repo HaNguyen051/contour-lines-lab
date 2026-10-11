@@ -151,6 +151,25 @@
     canvas.height = H;
     pipe.setSize(W, H);
     dirty = true;
+    backdropDirty = true;   // ảnh hoặc khung đổi → chụp lại nền tĩnh của bước Texture
+    placeFrame();
+  }
+
+  // Đường viền mảnh ôm sát ảnh. Canvas phủ cả khung và dùng object-fit: contain,
+  // nên phải tự tính chỗ ảnh thật sự nằm trong khung.
+  const frameLine = $('#frameLine');
+  function placeFrame() {
+    const st = $('#stage');
+    const sw = st.clientWidth;
+    const sh = st.clientHeight;
+    if (!W || !H || !sw || !sh) return;
+    const k = Math.min(sw / W, sh / H);
+    const w = W * k;
+    const h = H * k;
+    frameLine.style.left = (sw - w) / 2 + 'px';
+    frameLine.style.top = (sh - h) / 2 + 'px';
+    frameLine.style.width = w + 'px';
+    frameLine.style.height = h + 'px';
   }
 
   // Đặt ảnh nguồn: thu nhỏ nếu quá lớn, upload lên GPU.
@@ -199,9 +218,32 @@
     }
   }
 
+  // Giao diện theo bước: Texture (6) nền tối có ảnh mờ phía sau; các bước khác ảnh nền trắng
+  // nên trang cũng sáng theo.
+  function applyLook() {
+    document.body.dataset.look = settings.stage === 6 ? 'texture' : 'light';
+  }
+
   function setStage(n) {
     settings.stage = n;
     ui.setStage(n);
+    applyLook();
+    dirty = true;
+  }
+
+  // Nền tĩnh của bước Texture: vẽ một khung bước 6 (thời điểm 0, lưới phẳng), thu nhỏ rồi
+  // gắn làm ảnh nền. Chỉ "minh hoạ", không chuyển động. Vòng lặp vẽ lại bước đang xem ngay sau.
+  const backdrop = $('#backdrop');
+  let backdropDirty = true;
+  function snapshotBackdrop() {
+    pipe.render({ state, stage: 6, step: 0, t: 0, warp: null, foot: 0 });
+    const k = Math.min(1, 480 / Math.max(W, H));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(W * k));
+    c.height = Math.max(1, Math.round(H * k));
+    c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height);
+    backdrop.style.backgroundImage = 'url(' + c.toDataURL('image/jpeg', 0.85) + ')';
+    backdropDirty = false;
     dirty = true;
   }
 
@@ -246,6 +288,7 @@
       //  - "Mượt khi tương tác" bật và lưới chưa yên → mỗi khung (~60 hình/giây).
       // Đang tạm dừng thì grid.update() tự đóng băng và trả smooth = false, nên không vẽ lại:
       // ảnh đứng im hoàn toàn, kể cả khi rê chuột.
+      if (backdropDirty) snapshotBackdrop();
       const g = grid.update(dt, settings.playing);
       const smoothNow = g.smooth && state.grid.enabled && state.grid.smooth;
       const foot = footprint();
@@ -542,7 +585,7 @@
   });
 
   // Khung xem đổi cỡ → tính lại lọc chống moiré.
-  new ResizeObserver(() => { dirty = true; }).observe($('#stage'));
+  new ResizeObserver(() => { dirty = true; placeFrame(); }).observe($('#stage'));
 
   // ===========================================================================
   // 4. MẤT / KHÔI PHỤC GPU
@@ -604,6 +647,7 @@
   // KHỞI ĐỘNG
   // ===========================================================================
   applyLang();                  // đã bao gồm ui.sync(), ui.setStage() và setPlaying()
+  applyLook();
   // Ảnh mở sẵn nằm trong js/sample-image.js dưới dạng data URI, KHÔNG phải <img src="assets/...">:
   // mở trang bằng file:// thì ảnh cục bộ bị coi là khác nguồn, canvas nhiễm bẩn và
   // gl.texImage2D ném SECURITY_ERR. data URI cùng nguồn nên nạp texture được, và bản gộp

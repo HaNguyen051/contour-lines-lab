@@ -33,6 +33,8 @@
 </head>
 <!-- class "viewer" = chế độ xem: chỉ có ảnh + tương tác. Phím H hoặc nút ⚙ để mở bảng tuỳ chỉnh. -->
 <body class="viewer">
+  <!-- Nền của bước Texture: một khung tĩnh của chính ảnh Texture, phủ kín và làm mờ (main.js chụp) -->
+  <div class="backdrop" id="backdrop"></div>
   <header class="topbar">
     <strong class="brand">Contour Lines Lab</strong>
     <label class="field-inline">Preset <select id="presetSelect"></select></label>
@@ -67,6 +69,8 @@
         <canvas id="view"></canvas>
         <!-- Lớp vẽ đường lưới (bật bằng "Hiện lưới" hoặc phím G); không lọt vào PNG / video -->
         <canvas id="gridOverlay"></canvas>
+        <!-- Đường viền mảnh ôm sát ảnh; main.js đặt vị trí theo khung ảnh thật -->
+        <div class="frame-line" id="frameLine"></div>
         <div class="drop-hint">Thả ảnh vào đây</div>
         <pre class="error" id="error" hidden></pre>
       </div>

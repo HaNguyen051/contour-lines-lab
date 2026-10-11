@@ -242,7 +242,7 @@ body.hide-desc .desc, body.hide-desc .layer-desc { display: none; }
 body.viewer .topbar, body.viewer .sheet { display: none; }
 body.viewer .layout { grid-template-columns: 1fr; }
 /* Chừa chỗ hai bên cho cột bước (trái) và cột nút tròn (phải) để không che ảnh */
-body.viewer .viewport { padding: 0 190px; }   /* ảnh chạm sát trên dưới; hai bên bằng nhau để ảnh nằm chính giữa */
+body.viewer .viewport { padding: 24px 190px; }   /* chừa 24px trên dưới; hai bên bằng nhau để ảnh nằm chính giữa */
 
 /* Cột trái: các bước 0–6. Bước đang xem rõ hẳn, các bước khác mờ đi. */
 body.viewer .stagebar {
@@ -263,20 +263,66 @@ body.viewer .stage-btn {
   padding: 6px 10px;
   border: none;
   border-radius: 999px;
-  background: #3a3c3b;
-  color: #ececec;
+  background: var(--pill-bg);
+  color: var(--pill-fg);
   font: 12px/1.2 "Fragment Mono", ui-monospace, Consolas, monospace;
   letter-spacing: .02em;
   text-transform: uppercase;
   white-space: nowrap;
-  opacity: .35;
-  transition: opacity .2s;
+  transition: background .2s, color .2s;
 }
 body.viewer .stage-btn b { display: none; }   /* bỏ số thứ tự, chỉ giữ tên bước */
-/* Ẩn bước 0 (Ảnh gốc) và 1 (Chuyển động) ở chế độ xem; phím 0, 1 vẫn dùng được */
-body.viewer .stage-btn:nth-child(-n+2) { display: none; }
-body.viewer .stage-btn:hover { opacity: .7; }
-body.viewer .stage-btn.active { background: #3a3c3b; opacity: 1; }
+/* Ẩn bước 0 (Ảnh gốc), 1 (Chuyển động) và 3 (Gaussian blur, trông gần như Threshold) ở chế độ xem.
+   Phím 0, 1, 3 vẫn dùng được. */
+body.viewer .stage-btn:nth-child(-n+2), body.viewer .stage-btn:nth-child(4) { display: none; }
+body.viewer .stage-btn:hover { color: var(--pill-hover); }
+body.viewer .stage-btn.active { background: var(--pill-active-bg); color: var(--pill-active-fg); }
+
+/* ---------- Hai kiểu giao diện theo bước đang xem ---------- */
+/* light: Threshold → MacPaint (ảnh nền trắng) → trang trắng, nút xám nhạt, viền ảnh tối */
+body.viewer[data-look=light] {
+  --pill-bg: #e6e6e6;
+  --pill-fg: #b4b4b4;
+  --pill-hover: #7a7a7a;
+  --pill-active-bg: #4a4c4b;
+  --pill-active-fg: #fff;
+  --frame-line: #2b2b2b;
+  background: #fff;
+}
+/* texture: nền là ảnh Texture tĩnh, phóng to và làm mờ; nút tối trong suốt, viền ảnh sáng */
+body.viewer[data-look=texture] {
+  --pill-bg: rgba(58, 60, 59, .6);
+  --pill-fg: rgba(236, 236, 236, .4);
+  --pill-hover: rgba(236, 236, 236, .75);
+  --pill-active-bg: rgba(72, 76, 75, .92);
+  --pill-active-fg: #fff;
+  --frame-line: rgba(255, 255, 255, .85);
+  background: #121212;
+}
+body.viewer[data-look=light] .layout, body.viewer[data-look=light] .viewport { background: #fff; }
+body.viewer[data-look=texture] .layout, body.viewer[data-look=texture] .viewport { background: transparent; }
+body.viewer[data-look=light] .viewer-hint { color: #8a8a8a; text-shadow: none; }
+body.viewer[data-look=texture] .stage-btn { backdrop-filter: blur(6px); }
+
+.backdrop {
+  display: none;
+  position: fixed;
+  inset: -60px;                 /* tràn ra ngoài để mép mờ không lộ viền sáng */
+  z-index: 0;
+  background: #121212 center / cover no-repeat;
+  filter: blur(14px) brightness(.6);
+  pointer-events: none;
+}
+body.viewer[data-look=texture] .backdrop { display: block; }
+body.viewer .layout { position: relative; z-index: 1; }
+
+.frame-line { display: none; }
+body.viewer .frame-line {
+  display: block;
+  position: absolute;
+  border: 1px solid var(--frame-line);
+  pointer-events: none;
+}
 
 /* Cột phải: nút tròn chỉ có icon, rê chuột thì nhãn trượt ra bên trái */
 body.viewer .viewer-bar {
