@@ -184,7 +184,7 @@ CL.presets = (() => {
         { key: 'grain', label: 'Hạt', type: 'range', value: 0.5, min: 0, max: 1, step: 0.01, desc: '' },
         { key: 'streaks', label: 'Vệt quét', type: 'range', value: 0.6, min: 0, max: 1, step: 0.01,
           desc: 'Vệt ngang như trục máy scan.' },
-        { key: 'paperEdge', adv: true, label: 'Mép tờ giấy', type: 'range', value: 0.5, min: 0, max: 1, step: 0.01,
+        { key: 'paperEdge', adv: true, label: 'Mép tờ giấy', type: 'range', value: 0, min: 0, max: 1, step: 0.01,
           desc: 'Mép ảnh sáng loang như tờ giấy đặt lệch trên máy scan.' },
         { key: 'tone', adv: true, label: 'Tông ấm', type: 'range', value: 0.25, min: 0, max: 1, step: 0.01, desc: '' },
       ],
